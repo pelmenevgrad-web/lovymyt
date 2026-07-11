@@ -87,6 +87,35 @@ chat_messages: id, chat_id, sender_id, text, created_at, is_system
 id, event_id, from_user_id, to_user_id, rating (1-5), comment, created_at
 Отзыв разрешён только если оба были участниками одного event_id.
 
+### status_tags_catalog
+Справочник статусов-бейджей, которые участники ставят друг другу после встречи.
+| поле | тип | описание |
+|---|---|---|
+| id | int | PK |
+| key | text | напр. `shashlyk_guru`, `stingy`, `freeloader` |
+| label | text | название (тянется из translations по ключу `tag.<key>`) |
+| icon | text | эмодзи или иконка |
+| sentiment | enum | positive / playful_negative |
+| is_active | boolean | |
+
+### user_status_tags
+Кто кому какой статус поставил.
+| поле | тип | описание |
+|---|---|---|
+| id | uuid | PK |
+| event_id | uuid | FK events — обязателен, ставить можно только по общему мероприятию |
+| from_user_id, to_user_id | uuid | FK users |
+| tag_id | int | FK status_tags_catalog |
+| created_at | timestamptz | |
+
+Уникальный индекс на (event_id, from_user_id, to_user_id, tag_id) — чтобы
+нельзя было спамить один и тот же тег много раз за одну встречу.
+
+На профиле показываются топ-3 тега по количеству получений (агрегат по
+user_status_tags.tag_id для данного to_user_id). Playful_negative-теги
+отображаются публично только начиная с 3+ отметок от разных пользователей —
+это защита от токсичного использования одним недоброжелателем.
+
 ### likes_gifts
 id, from_user_id, to_user_id, event_id, type (like/gift), gift_id, stars_amount, created_at
 
@@ -117,9 +146,16 @@ id, event_id, from_user_id, target_user_id, reason, status, created_at
 ### Профиль
 - аватар, имя, бейдж верификации, PRO-бейдж
 - рейтинг и число встреч
+- топ-3 статуса-бейджа (напр. "🔥 Гуру шашлика ×7", "🎉 Душа компании ×4")
 - статистика: организовал / % неявок
 - отзывы от других участников
 - кнопка отправки симпатии за звёзды
+
+### Экран после завершения мероприятия (оценка участников)
+- список участников, по каждому: оценка 1-5 + выбор статуса-тега из каталога
+  (можно несколько за раз)
+- позитивные и playful_negative теги визуально разделены (не смешаны в один
+  ряд), чтобы это ощущалось как игра, а не как донос
 
 ### Создание мероприятия
 - выбор категории (чипы)
