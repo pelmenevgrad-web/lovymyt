@@ -1,15 +1,13 @@
 import { useEffect, useState } from 'react'
+import WebApp from '@twa-dev/sdk'
 
 export default function App() {
   const [tgUser, setTgUser] = useState(null)
 
   useEffect(() => {
-    const tg = window.Telegram?.WebApp
-    if (tg) {
-      tg.ready()
-      tg.expand()
-      setTgUser(tg.initDataUnsafe?.user ?? null)
-    }
+    WebApp.ready()
+    WebApp.expand()
+    setTgUser(WebApp.initDataUnsafe?.user ?? null)
   }, [])
 
   return (
