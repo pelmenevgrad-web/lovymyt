@@ -22,7 +22,7 @@ export default class ErrorBoundary extends Component {
     return (
       <div style={{
         padding: 24, fontFamily: 'monospace',
-        background: '#fff1f2', minHeight: '100dvh',
+        background: '#fff1f2', minHeight: 'var(--full-h)',
         color: '#7f1d1d',
       }}>
         <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 12 }}>

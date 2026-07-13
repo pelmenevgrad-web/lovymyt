@@ -34,7 +34,7 @@ function InitDebug({ step, info, error }) {
     <div style={{
       padding: 20, fontFamily: '-apple-system, sans-serif',
       background: failed ? '#fff1f2' : '#f8fafc',
-      minHeight: '100dvh', color: '#0f172a',
+      minHeight: 'var(--full-h)', color: '#0f172a',
     }}>
       <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 4 }}>
         {failed ? '💥 Помилка ініціалізації' : '⏳ Ініціалізація…'}

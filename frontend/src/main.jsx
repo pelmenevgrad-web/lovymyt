@@ -24,13 +24,9 @@ console.log('[main] calling ReactDOM.createRoot().render()...')
 
 try {
   ReactDOM.createRoot(rootEl).render(
-    // TODO: повернути після діагностики ↓
-    // <ErrorBoundary>
-    //   <App />
-    // </ErrorBoundary>
-    <div style={{ padding: 40, fontSize: 24, background: 'red', color: 'white' }}>
-      TEST 12345
-    </div>,
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>,
   )
   console.log('[main] render() returned — React scheduling is started')
 } catch (err) {
