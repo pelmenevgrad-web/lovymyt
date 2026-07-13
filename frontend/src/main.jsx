@@ -24,12 +24,13 @@ console.log('[main] calling ReactDOM.createRoot().render()...')
 
 try {
   ReactDOM.createRoot(rootEl).render(
-    // StrictMode навмисно вимкнено на час діагностики —
-    // у dev-режимі він двічі викликає компоненти і може маскувати реальне місце падіння.
-    // Поверни <React.StrictMode> після того, як білий екран зникне.
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>,
+    // TODO: повернути після діагностики ↓
+    // <ErrorBoundary>
+    //   <App />
+    // </ErrorBoundary>
+    <div style={{ padding: 40, fontSize: 24, background: 'red', color: 'white' }}>
+      TEST 12345
+    </div>,
   )
   console.log('[main] render() returned — React scheduling is started')
 } catch (err) {
