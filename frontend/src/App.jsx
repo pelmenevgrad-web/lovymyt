@@ -80,8 +80,6 @@ function InitDebug({ step, info, error }) {
 // ── Main App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-  return <InitDebug step="mounting" info={null} error={null} />
-  // весь інший код нижче лишається, просто недосяжний поки що
   const [step, setStep]           = useState('mounting')
   const [tgInfo, setTgInfo]       = useState(null)
   const [initError, setInitError] = useState(null)
@@ -89,23 +87,29 @@ export default function App() {
   useEffect(() => {
     setStep('tg_check')
 
-    const info = {
-      windowTelegram:  !!window?.Telegram,
-      webApp:          !!window?.Telegram?.WebApp,
-      platform:        WebApp.platform || 'unknown',
-      initDataLength:  WebApp.initData?.length ?? 0,
-      hasUser:         !!WebApp.initDataUnsafe?.user,
-      userId:          WebApp.initDataUnsafe?.user?.id ?? null,
-      userName:        WebApp.initDataUnsafe?.user?.first_name ?? null,
+    try {
+      const info = {
+        windowTelegram:  !!window?.Telegram,
+        webApp:          !!window?.Telegram?.WebApp,
+        platform:        WebApp.platform || 'unknown',
+        initDataLength:  WebApp.initData?.length ?? 0,
+        hasUser:         !!WebApp.initDataUnsafe?.user,
+        userId:          WebApp.initDataUnsafe?.user?.id ?? null,
+        userName:        WebApp.initDataUnsafe?.user?.first_name ?? null,
+      }
+      setTgInfo(info)
+      setStep('tg_ready')
+    } catch (err) {
+      setInitError('Крок збору info: ' + err.message)
+      setStep('failed')
+      return
     }
-    setTgInfo(info)
-    setStep('tg_ready')
 
     try {
       WebApp.ready()
       WebApp.expand()
     } catch (err) {
-      setInitError(err.message)
+      setInitError('Крок WebApp.ready/expand: ' + err.message)
       setStep('failed')
       return
     }
@@ -113,21 +117,12 @@ export default function App() {
     setStep('done')
   }, [])
 
-  // Show debug overlay until init is confirmed complete.
-  // If the app hangs at any step this screen stays visible instead of blank.
   if (step !== 'done') {
     return <InitDebug step={step} info={tgInfo} error={initError} />
   }
 
-  return (
-    <HashRouter>
-      <Routes>
-        <Route path="/"        element={<WithNav><MapScreen /></WithNav>} />
-        <Route path="/profile" element={<WithNav><ProfileScreen /></WithNav>} />
-        <Route path="/create"  element={<CreateScreen />} />
-      </Routes>
-    </HashRouter>
-  )
+  // TODO: повернути HashRouter після підтвердження що step досягає 'done'
+  return <InitDebug step="done — ось тут мав би бути HashRouter" info={tgInfo} error={null} />
 }
 
 function WithNav({ children }) {
