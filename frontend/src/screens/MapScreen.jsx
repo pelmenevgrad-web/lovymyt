@@ -49,7 +49,7 @@ function LocateButton({ onLocate }) {
     <button
       onClick={handleClick}
       style={{
-        position: 'absolute', right: 14, bottom: 14, zIndex: 900,
+        position: 'absolute', right: 14, bottom: 'calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 14px)', zIndex: 900,
         width: 44, height: 44, borderRadius: '50%',
         background: '#fff', border: 'none', cursor: 'pointer',
         boxShadow: 'var(--shadow-md)',
