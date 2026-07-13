@@ -55,12 +55,6 @@ function LocateButton({ onLocate }) {
 }
 
 export default function MapScreen() {
-  return (
-    <div style={{ padding: 40, fontSize: 24, background: 'orange' }}>
-      MAP SCREEN TEST — no leaflet yet
-    </div>
-  )
-  // решта коду нижче лишається недосяжною поки що
   const [selectedCat, setSelectedCat] = useState(0)
   const [selectedEvent, setSelectedEvent] = useState(null)
   const mapRef = useRef(null)
