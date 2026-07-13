@@ -93,6 +93,11 @@ body {
   position: relative;
 }
 
+/* ── Dark map tile tint (cold blue) ── */
+[data-theme="dark"] .leaflet-tile-pane {
+  filter: hue-rotate(180deg) saturate(120%) brightness(0.9) contrast(105%);
+}
+
 /* ── Leaflet controls above BottomNav ── */
 .leaflet-bottom {
   bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)) !important;

@@ -14,7 +14,7 @@ export default function BottomNav() {
     <nav style={{
       position: 'fixed', bottom: 0, left: 0, right: 0,
       height: 'calc(var(--nav-h) + env(safe-area-inset-bottom, 0px))',
-      background: '#fff',
+      background: 'var(--card)',
       borderTop: '1px solid var(--border)',
       display: 'flex',
       alignItems: 'flex-start',

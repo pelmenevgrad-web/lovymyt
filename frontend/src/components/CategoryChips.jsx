@@ -14,7 +14,7 @@ export default function CategoryChips({ selected, onChange }) {
             onClick={() => onChange(active ? 0 : cat.id)}
             className="chip"
             style={{
-              background: active ? cat.color : '#fff',
+              background: active ? cat.color : 'var(--card)',
               color:      active ? '#fff'     : 'var(--text)',
               border:     active ? 'none'     : '1.5px solid var(--border)',
               boxShadow:  active ? `0 2px 10px ${cat.color}55` : 'none',

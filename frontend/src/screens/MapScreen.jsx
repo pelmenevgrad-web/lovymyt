@@ -52,7 +52,7 @@ function LocateButton({ onLocate }) {
       style={{
         position: 'absolute', right: 14, bottom: 'calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 14px)', zIndex: 900,
         width: 44, height: 44, borderRadius: '50%',
-        background: '#fff', border: 'none', cursor: 'pointer',
+        background: 'var(--card)', border: 'none', cursor: 'pointer',
         boxShadow: 'var(--shadow-md)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 20,
@@ -96,12 +96,12 @@ export default function MapScreen() {
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 800,
         paddingTop: 12, paddingBottom: 10,
-        background: 'linear-gradient(to bottom, rgba(255,255,255,.98) 70%, transparent)',
+        background: 'linear-gradient(to bottom, var(--card) 70%, transparent)',
       }}>
         <div style={{ padding: '0 16px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             flex: 1, display: 'flex', alignItems: 'center', gap: 8,
-            background: '#fff', borderRadius: 12, padding: '9px 14px',
+            background: 'var(--card)', borderRadius: 12, padding: '9px 14px',
             boxShadow: 'var(--shadow-sm)', border: '1.5px solid var(--border)',
           }}>
             <span style={{ fontSize: 16 }}>🔍</span>
