@@ -121,8 +121,15 @@ export default function App() {
     return <InitDebug step={step} info={tgInfo} error={initError} />
   }
 
-  // TODO: повернути HashRouter після підтвердження що step досягає 'done'
-  return <InitDebug step="done — ось тут мав би бути HashRouter" info={tgInfo} error={null} />
+  return (
+    <HashRouter>
+      <Routes>
+        <Route path="/"        element={<WithNav><MapScreen /></WithNav>} />
+        <Route path="/profile" element={<WithNav><ProfileScreen /></WithNav>} />
+        <Route path="/create"  element={<CreateScreen />} />
+      </Routes>
+    </HashRouter>
+  )
 }
 
 function WithNav({ children }) {
