@@ -80,6 +80,15 @@ function InitDebug({ step, info, error }) {
 // ── Main App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
+  return (
+    <div style={{
+      background: 'lime', color: 'black', padding: 40,
+      fontSize: 28, fontWeight: 900, minHeight: 300,
+    }}>
+      HARDCODED TEST — NO CSS VARS, NO CONDITIONS
+    </div>
+  )
+  // весь інший код нижче лишається, просто недосяжний поки що
   const [step, setStep]           = useState('mounting')
   const [tgInfo, setTgInfo]       = useState(null)
   const [initError, setInitError] = useState(null)

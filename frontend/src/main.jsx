@@ -24,18 +24,9 @@ console.log('[main] calling ReactDOM.createRoot().render()...')
 
 try {
   ReactDOM.createRoot(rootEl).render(
-    // TODO: повернути після діагностики ↓
-    // <ErrorBoundary>
-    //   <App />
-    // </ErrorBoundary>
-    <div style={{
-      position: 'fixed', inset: 0, background: 'yellow',
-      padding: 20, fontSize: 20, color: 'black', zIndex: 99999,
-      overflow: 'auto',
-    }}>
-      <div>ISOLATED TEST</div>
+    <ErrorBoundary>
       <App />
-    </div>,
+    </ErrorBoundary>,
   )
   console.log('[main] render() returned — React scheduling is started')
 } catch (err) {
