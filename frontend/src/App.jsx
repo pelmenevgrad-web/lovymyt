@@ -121,12 +121,11 @@ export default function App() {
     return <InitDebug step={step} info={tgInfo} error={initError} />
   }
 
+  // TODO: повернути повний роутер після підтвердження що HashRouter працює
   return (
     <HashRouter>
       <Routes>
-        <Route path="/"        element={<WithNav><MapScreen /></WithNav>} />
-        <Route path="/profile" element={<WithNav><ProfileScreen /></WithNav>} />
-        <Route path="/create"  element={<CreateScreen />} />
+        <Route path="/" element={<div style={{ padding: 40, fontSize: 24, background: 'cyan' }}>ROUTER TEST</div>} />
       </Routes>
     </HashRouter>
   )
