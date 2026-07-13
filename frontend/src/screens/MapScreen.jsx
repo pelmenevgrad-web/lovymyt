@@ -12,17 +12,26 @@ function createMarker(cat, isActive) {
   const size = isActive ? 46 : 38
   return L.divIcon({
     className: '',
-    html: `<div style="
-      position:relative;
-      width:${size}px; height:${size}px;
-      background:${cat.color};
-      border-radius:50%;
-      display:flex; align-items:center; justify-content:center;
-      font-size:${isActive ? 20 : 17}px;
-      border:3px solid white;
-      box-shadow:0 2px 10px rgba(0,0,0,.25);
-      ${isActive ? `animation:pulse-ring 1.8s ease-out infinite;` : ''}
-    ">${cat.icon}</div>`,
+    html: `
+      <div style="position:relative; width:${size}px; height:${size}px;">
+        ${isActive ? `
+          <div style="
+            position:absolute; inset:-6px; border-radius:50%;
+            background:${cat.color}; opacity:.5;
+            animation:pulse-ring 1.8s ease-out infinite;
+          "></div>
+        ` : ''}
+        <div style="
+          position:relative; z-index:1;
+          width:100%; height:100%;
+          background:${cat.color}; border-radius:50%;
+          display:flex; align-items:center; justify-content:center;
+          font-size:${isActive ? 20 : 17}px;
+          border:3px solid white;
+          box-shadow:0 2px 10px rgba(0,0,0,.25);
+        ">${cat.icon}</div>
+      </div>
+    `,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   })
