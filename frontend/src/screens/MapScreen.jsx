@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
+import WebApp from '@twa-dev/sdk'
 import CategoryChips from '../components/CategoryChips.jsx'
 import EventCard from '../components/EventCard.jsx'
 import { MOCK_EVENTS, CATEGORIES } from '../data/mockData.js'
@@ -66,7 +67,17 @@ function LocateButton({ onLocate }) {
 export default function MapScreen() {
   const [selectedCat, setSelectedCat] = useState(0)
   const [selectedEvent, setSelectedEvent] = useState(null)
+  const [isDark, setIsDark] = useState(
+    document.documentElement.getAttribute('data-theme') === 'dark'
+  )
   const mapRef = useRef(null)
+
+  useEffect(() => {
+    const onTheme = () =>
+      setIsDark(document.documentElement.getAttribute('data-theme') === 'dark')
+    WebApp.onEvent('themeChanged', onTheme)
+    return () => WebApp.offEvent('themeChanged', onTheme)
+  }, [])
 
   const filtered = selectedCat === 0
     ? MOCK_EVENTS
@@ -116,8 +127,10 @@ export default function MapScreen() {
         ref={mapRef}
       >
         <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url={isDark
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
+          attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
         />
 
         {filtered.map((event) => {

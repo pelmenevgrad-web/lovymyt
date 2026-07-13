@@ -30,6 +30,31 @@
   --shadow-lg:     0 8px 30px rgba(0,0,0,.14);
 }
 
+/* ── Dark theme ── */
+[data-theme="dark"] {
+  --accent:        #818CF8;
+  --accent-light:  #1E1B4B;
+  --accent-dark:   #6366F1;
+  --green:         #4ADE80;
+  --green-light:   #052E16;
+  --orange:        #FBBF24;
+  --orange-light:  #1C0F04;
+  --pink:          #F472B6;
+  --pink-light:    #2D0A1E;
+  --blue:          #60A5FA;
+  --blue-light:    #0C1A2E;
+  --red:           #F87171;
+  --text:          #F1F5F9;
+  --text-2:        #94A3B8;
+  --text-3:        #475569;
+  --bg:            #0F172A;
+  --card:          #1E293B;
+  --border:        #334155;
+  --shadow-sm:     0 1px 3px rgba(0,0,0,.3),  0 1px 2px rgba(0,0,0,.2);
+  --shadow-md:     0 4px 12px rgba(0,0,0,.4);
+  --shadow-lg:     0 8px 30px rgba(0,0,0,.5);
+}
+
 html, body, #root {
   height: 100vh;   /* fallback */
   height: 100dvh;
@@ -71,6 +96,18 @@ body {
 /* ── Leaflet controls above BottomNav ── */
 .leaflet-bottom {
   bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* ── Leaflet attribution — compact & unobtrusive ── */
+.leaflet-control-attribution {
+  background: rgba(255, 255, 255, .55) !important;
+  font-size: 9px !important;
+  padding: 1px 6px !important;
+  opacity: .7;
+  border-radius: 6px 0 0 0;
+}
+.leaflet-control-attribution a {
+  color: inherit !important;
 }
 
 /* ── Map pulse animation ── */

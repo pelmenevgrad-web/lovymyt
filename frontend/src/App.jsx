@@ -114,7 +114,15 @@ export default function App() {
       return
     }
 
+    const applyTheme = () => {
+      document.documentElement.setAttribute('data-theme', WebApp.colorScheme || 'light')
+    }
+    applyTheme()
+    WebApp.onEvent('themeChanged', applyTheme)
+
     setStep('done')
+
+    return () => WebApp.offEvent('themeChanged', applyTheme)
   }, [])
 
   if (step !== 'done') {
