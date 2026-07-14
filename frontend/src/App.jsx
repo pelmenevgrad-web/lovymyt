@@ -5,6 +5,7 @@ import BottomNav from './components/BottomNav.jsx'
 import MapScreen from './screens/MapScreen.jsx'
 import ProfileScreen from './screens/ProfileScreen.jsx'
 import CreateScreen from './screens/CreateScreen.jsx'
+import WelcomeScreen from './screens/WelcomeScreen.jsx'
 
 // ── Visible init-debug overlay ───────────────────────────────────────────────
 // Rendered instead of the real app while initialization is in progress.
@@ -83,6 +84,14 @@ export default function App() {
   const [step, setStep]           = useState('mounting')
   const [tgInfo, setTgInfo]       = useState(null)
   const [initError, setInitError] = useState(null)
+  const [showWelcome, setShowWelcome] = useState(
+    () => !localStorage.getItem('lovymyt_terms_accepted')
+  )
+
+  function handleJoin() {
+    localStorage.setItem('lovymyt_terms_accepted', Date.now().toString())
+    setShowWelcome(false)
+  }
 
   useEffect(() => {
     setStep('tg_check')
@@ -127,6 +136,10 @@ export default function App() {
 
   if (step !== 'done') {
     return <InitDebug step={step} info={tgInfo} error={initError} />
+  }
+
+  if (showWelcome) {
+    return <WelcomeScreen onJoin={handleJoin} />
   }
 
   return (

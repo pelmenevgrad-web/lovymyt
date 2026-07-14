@@ -56,7 +56,6 @@ function LocateButton({ onLocate }) {
         background: 'var(--card)', border: 'none', cursor: 'pointer',
         boxShadow: 'var(--shadow-md)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
       title="Моє місцезнаходження"
     >

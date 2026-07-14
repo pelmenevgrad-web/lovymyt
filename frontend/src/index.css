@@ -1,3 +1,24 @@
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap');
+
+@font-face {
+  font-family: 'Cricket-Bold';
+  src: url('./assets/fonts/Cricket-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Drugs';
+  src: url('./assets/fonts/Drugs.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noteworthy-Light';
+  src: url('./assets/fonts/Noteworthy-Light.woff2') format('woff2');
+  font-weight: 300;
+  font-display: swap;
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
@@ -218,4 +239,152 @@ input, textarea, select {
 }
 input:focus, textarea:focus {
   border-color: var(--accent);
+}
+
+/* ── Welcome / Onboarding screen ───────────────────────────────────────────── */
+
+.welcome-screen {
+  position: relative;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: linear-gradient(180deg, #2D1B69 0%, #4A2E8C 100%);
+}
+
+.welcome-tagline {
+  font-family: 'Noteworthy-Light', sans-serif;
+  font-size: clamp(16px, 4.5vw, 26px);
+  color: #FFFFFF;
+  opacity: 0.9;
+  margin-bottom: 2px;
+}
+
+.welcome-title-line1 {
+  font-family: 'Cricket-Bold', sans-serif;
+  font-size: clamp(62px, 19vw, 194px);
+  color: #FFFFFF;
+  text-align: left;
+  -webkit-text-stroke: 4px #321F1F;
+  filter: drop-shadow(8px 8px 12px rgba(28,11,38,0.3));
+  line-height: 0.88;
+  letter-spacing: -1px;
+}
+
+.welcome-title-line2 {
+  font-family: 'Drugs', sans-serif;
+  font-size: clamp(46px, 14vw, 146px);
+  color: #FFDB00;
+  text-align: left;
+  line-height: 0.88;
+}
+
+.welcome-cta-button {
+  display: block;
+  width: 100%;
+  background-image: linear-gradient(105deg, #9DFF00 0%, #70CD34 100%);
+  border: 8px solid #FFFFFF;
+  box-shadow: 0 10px 22px 4px rgba(0,0,0,0.25);
+  border-radius: 142px;
+  padding: 20px 0;
+  cursor: pointer;
+  text-align: center;
+  transition: transform .12s, box-shadow .12s;
+}
+.welcome-cta-button:active {
+  transform: scale(.97);
+  box-shadow: 0 6px 14px 2px rgba(0,0,0,0.2);
+}
+
+.welcome-cta-text {
+  font-family: -apple-system, 'Helvetica Neue', sans-serif;
+  font-size: clamp(20px, 5.5vw, 38px);
+  font-weight: 700;
+  color: #131A5D;
+  pointer-events: none;
+}
+
+.welcome-bubble-purple {
+  background: #DA16F8;
+  border-radius: 999px;
+  padding: 9px 16px;
+  display: inline-block;
+  box-shadow: 0 4px 16px rgba(218,22,248,0.4);
+}
+.welcome-bubble-orange {
+  background: #F56100;
+  border-radius: 999px;
+  padding: 9px 16px;
+  display: inline-block;
+  box-shadow: 0 4px 16px rgba(245,97,0,0.4);
+}
+.welcome-bubble-text {
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 600;
+  font-size: clamp(13px, 3.8vw, 20px);
+  color: #FFFFFF;
+  white-space: nowrap;
+}
+
+.welcome-stat-bg {
+  background: rgba(0,0,0,0.35);
+  border-radius: 22px;
+  padding: 12px 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.welcome-stat-number {
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 700;
+  font-size: clamp(24px, 7vw, 48px);
+  color: #FFFFFF;
+  letter-spacing: 1.5px;
+  line-height: 1;
+}
+.welcome-stat-label {
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 400;
+  font-size: clamp(13px, 3.5vw, 22px);
+  color: #5AA5C4;
+  letter-spacing: -0.4px;
+  line-height: 1;
+}
+
+.welcome-photo-girl {
+  position: absolute;
+  right: 4%;
+  top: 42%;
+  width: 45%;
+  max-width: 300px;
+  max-height: 48vh;
+  object-fit: contain;
+  object-position: top;
+  z-index: 3;
+  pointer-events: none;
+}
+.welcome-photo-guy {
+  position: absolute;
+  left: 2%;
+  top: 56%;
+  width: 42%;
+  max-width: 260px;
+  max-height: 40vh;
+  object-fit: contain;
+  object-position: top;
+  z-index: 2;
+  pointer-events: none;
+}
+.welcome-bg-planet {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Narrow screens: scale down title to prevent overflow */
+@media (max-width: 360px) {
+  .welcome-title-line1 { font-size: 58px; }
+  .welcome-title-line2 { font-size: 43px; }
 }
