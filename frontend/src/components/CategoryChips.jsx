@@ -21,7 +21,7 @@ export default function CategoryChips({ selected, onChange }) {
               flexShrink: 0,
             }}
           >
-            <span>{cat.icon}</span>
+            <cat.Icon size={18} />
             {cat.name}
           </button>
         )

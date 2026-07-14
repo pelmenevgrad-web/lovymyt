@@ -1,11 +1,18 @@
-import { MOCK_USER, MOCK_REVIEWS, MOCK_EVENTS } from '../data/mockData.js'
+import { Star, Sparkles, BadgeCheck } from 'lucide-react'
+import { MOCK_USER, MOCK_REVIEWS, MOCK_EVENTS, CATEGORIES } from '../data/mockData.js'
 import { Avatar } from '../components/EventCard.jsx'
 
 function Stars({ rating }) {
+  const rounded = Math.round(rating)
   return (
-    <span style={{ fontSize: 14, letterSpacing: 1 }}>
+    <span style={{ display: 'inline-flex', gap: 2 }}>
       {[1,2,3,4,5].map(i => (
-        <span key={i} style={{ color: i <= Math.round(rating) ? '#F59E0B' : '#E2E8F0' }}>★</span>
+        <Star
+          key={i}
+          size={14}
+          fill={i <= rounded ? 'var(--orange)' : 'none'}
+          color={i <= rounded ? 'var(--orange)' : 'var(--border)'}
+        />
       ))}
     </span>
   )
@@ -83,16 +90,16 @@ export default function ProfileScreen() {
                 {user.first_name} {user.last_name}
               </span>
             </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ fontSize: 12, opacity: .85 }}>@{user.username}</span>
               {user.is_verified && (
-                <span className="badge" style={{ background: 'rgba(255,255,255,.25)', color: '#fff' }}>
-                  ✓ Верифікований
+                <span className="badge" style={{ background: 'rgba(255,255,255,.25)', color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  <BadgeCheck size={13} /> Верифікований
                 </span>
               )}
               {user.is_pro && (
-                <span className="badge" style={{ background: '#F59E0B', color: '#fff' }}>
-                  ⭐ PRO
+                <span className="badge" style={{ background: '#F59E0B', color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  <Star size={11} fill="currentColor" /> PRO
                 </span>
               )}
             </div>
@@ -128,7 +135,7 @@ export default function ProfileScreen() {
       <div style={{ margin: '12px 16px 0' }} className="card">
         <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 28 }}>⭐</span>
+            <Star size={28} fill="var(--orange)" color="var(--orange)" />
             <div>
               <div style={{ fontSize: 18, fontWeight: 800 }}>{user.stars_balance} Stars</div>
               <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Ваш баланс</div>
@@ -147,12 +154,14 @@ export default function ProfileScreen() {
           padding: '16px',
           color: '#fff',
         }}>
-          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>✨ Спробуй PRO</div>
+          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Sparkles size={18} /> Спробуй PRO
+          </div>
           <div style={{ fontSize: 13, opacity: .9, marginBottom: 12 }}>
             Бачиш, хто переглянув профіль, пріоритет на карті, необмежені мероприятия
           </div>
-          <button className="btn" style={{ background: 'rgba(255,255,255,.25)', color: '#fff', padding: '10px 20px', fontSize: 13 }}>
-            Активувати за Stars ⭐
+          <button className="btn" style={{ background: 'rgba(255,255,255,.25)', color: '#fff', padding: '10px 20px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            Активувати за Stars <Star size={14} fill="currentColor" />
           </button>
         </div>
       )}
@@ -161,20 +170,24 @@ export default function ProfileScreen() {
       <div style={{ padding: '20px 16px 0' }}>
         <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 12 }}>Мої мероприятия</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {myEvents.map(e => (
-            <div key={e.id} className="card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 24 }}>
-                {['⚽','🚶','🎲','🍖','🎵','✈️'][e.category_id - 1] ?? '🔥'}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
-                  {new Date(e.start_time).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+          {myEvents.map(e => {
+            const cat = CATEGORIES.find(c => c.id === e.category_id)
+            const CatIcon = cat?.Icon
+            return (
+              <div key={e.id} className="card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ color: cat?.color, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {CatIcon && <CatIcon size={22} />}
                 </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
+                    {new Date(e.start_time).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+                <span style={{ fontSize: 18, color: 'var(--text-3)' }}>›</span>
               </div>
-              <span style={{ fontSize: 18 }}>›</span>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 

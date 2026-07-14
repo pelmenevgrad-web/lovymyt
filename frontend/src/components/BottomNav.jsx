@@ -1,9 +1,10 @@
 import { useNavigate, useLocation } from 'react-router-dom'
+import { Map, Plus, User } from 'lucide-react'
 
 const TABS = [
-  { path: '/',        icon: MapIcon,    label: 'Карта' },
-  { path: '/create',  icon: PlusIcon,   label: 'Створити', accent: true },
-  { path: '/profile', icon: UserIcon,   label: 'Профіль' },
+  { path: '/',        Icon: Map,  label: 'Карта' },
+  { path: '/create',  Icon: Plus, label: 'Створити', accent: true },
+  { path: '/profile', Icon: User, label: 'Профіль' },
 ]
 
 export default function BottomNav() {
@@ -22,7 +23,7 @@ export default function BottomNav() {
       zIndex: 500,
       boxShadow: '0 -4px 20px rgba(0,0,0,.07)',
     }}>
-      {TABS.map(({ path, icon: Icon, label, accent }) => {
+      {TABS.map(({ path, Icon, label, accent }) => {
         const active = pathname === path
         return (
           <button
@@ -42,8 +43,9 @@ export default function BottomNav() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 boxShadow: '0 4px 14px rgba(99,102,241,.45)',
                 marginTop: -18,
+                color: '#fff',
               }}>
-                <Icon size={22} color="#fff" />
+                <Icon size={22} />
               </span>
             ) : (
               <Icon size={22} color={active ? 'var(--accent)' : 'var(--text-3)'} />
@@ -58,33 +60,5 @@ export default function BottomNav() {
         )
       })}
     </nav>
-  )
-}
-
-function MapIcon({ size, color }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
-      <line x1="9" y1="3" x2="9" y2="18" />
-      <line x1="15" y1="6" x2="15" y2="21" />
-    </svg>
-  )
-}
-
-function PlusIcon({ size, color }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round">
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  )
-}
-
-function UserIcon({ size, color }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
   )
 }

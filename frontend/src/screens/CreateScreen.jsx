@@ -1,17 +1,18 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, MapPin, Zap } from 'lucide-react'
 import { CATEGORIES } from '../data/mockData.js'
 
 const BUDGET_OPTIONS = [
-  { value: 'free',      label: '🎁 Безкоштовно' },
-  { value: 'each_pays', label: '💳 Кожен платить' },
-  { value: 'shared',    label: '🤝 Складчина' },
+  { value: 'free',      Icon: Gift,       label: 'Безкоштовно' },
+  { value: 'each_pays', Icon: CreditCard, label: 'Кожен платить' },
+  { value: 'shared',    Icon: Handshake,  label: 'Складчина' },
 ]
 
 const CONDITIONS = [
-  { key: 'with_pets',      icon: '🐾', label: 'З тваринами' },
-  { key: 'with_kids',      icon: '🧒', label: 'З дітьми' },
-  { key: 'verified_only',  icon: '✓',  label: 'Тільки верифіковані' },
+  { key: 'with_pets',      Icon: PawPrint,   label: 'З тваринами' },
+  { key: 'with_kids',      Icon: Baby,       label: 'З дітьми' },
+  { key: 'verified_only',  Icon: BadgeCheck, label: 'Тільки верифіковані' },
 ]
 
 function Section({ title, children }) {
@@ -84,7 +85,7 @@ export default function CreateScreen() {
                   boxShadow: active ? `0 2px 10px ${cat.color}55` : 'none',
                 }}
               >
-                {cat.icon} {cat.name}
+                <cat.Icon size={18} /> {cat.name}
               </button>
             )
           })}
@@ -120,7 +121,7 @@ export default function CreateScreen() {
           }}
           onClick={() => alert('Picker карти буде тут')}
         >
-          <span style={{ fontSize: 28 }}>📍</span>
+          <MapPin size={28} color="var(--accent)" />
           <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>Вибрати точку на карті</span>
         </div>
       </Section>
@@ -135,13 +136,13 @@ export default function CreateScreen() {
         />
         <button
           className="chip"
-          style={{ marginTop: 8, background: 'var(--orange-light)', color: 'var(--orange)', border: 'none' }}
+          style={{ marginTop: 8, background: 'var(--orange-light)', color: 'var(--orange)', border: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}
           onClick={() => {
             const now = new Date(Date.now() + 5 * 60_000)
             set('start_time', now.toISOString().slice(0, 16))
           }}
         >
-          ⚡ Прямо зараз
+          <Zap size={15} /> Прямо зараз
         </button>
       </Section>
 
@@ -185,7 +186,7 @@ export default function CreateScreen() {
                   fontSize: 12, padding: '10px 8px',
                 }}
               >
-                {opt.label}
+                <opt.Icon size={15} /> {opt.label}
               </button>
             )
           })}
@@ -224,7 +225,7 @@ export default function CreateScreen() {
                   fontWeight: active ? 700 : 500,
                 }}
               >
-                {cond.icon} {cond.label}
+                <cond.Icon size={15} /> {cond.label}
               </button>
             )
           })}
@@ -239,7 +240,9 @@ export default function CreateScreen() {
           disabled={!canSubmit}
           onClick={handleCreate}
         >
-          Створити і відкрити чат 🚀
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+            Створити і відкрити чат <Rocket size={18} />
+          </span>
         </button>
       </div>
     </div>

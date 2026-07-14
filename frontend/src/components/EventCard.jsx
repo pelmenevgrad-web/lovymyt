@@ -1,3 +1,4 @@
+import { BadgeCheck } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
 
 function formatTime(iso) {
@@ -61,7 +62,9 @@ export default function EventCard({ event, onClick, compact = false }) {
               {event.status === 'active' && '● '}{status.label}
             </span>
             {event.conditions?.verified_only && (
-              <span className="badge" style={{ background: 'var(--blue-light)', color: 'var(--blue)' }}>✓ Верифік.</span>
+              <span className="badge" style={{ background: 'var(--blue-light)', color: 'var(--blue)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                <BadgeCheck size={11} /> Верифік.
+              </span>
             )}
           </div>
           <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

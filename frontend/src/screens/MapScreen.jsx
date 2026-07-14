@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import WebApp from '@twa-dev/sdk'
+import { Search, SlidersHorizontal, LocateFixed } from 'lucide-react'
 import CategoryChips from '../components/CategoryChips.jsx'
 import EventCard from '../components/EventCard.jsx'
 import { MOCK_EVENTS, CATEGORIES } from '../data/mockData.js'
@@ -55,11 +56,11 @@ function LocateButton({ onLocate }) {
         background: 'var(--card)', border: 'none', cursor: 'pointer',
         boxShadow: 'var(--shadow-md)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 20,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
       title="Моє місцезнаходження"
     >
-      🎯
+      <LocateFixed size={20} />
     </button>
   )
 }
@@ -104,16 +105,18 @@ export default function MapScreen() {
             background: 'var(--card)', borderRadius: 12, padding: '9px 14px',
             boxShadow: 'var(--shadow-sm)', border: '1.5px solid var(--border)',
           }}>
-            <span style={{ fontSize: 16 }}>🔍</span>
+            <Search size={16} color="var(--text-3)" />
             <span style={{ color: 'var(--text-3)', fontSize: 14 }}>Пошук мероприятий…</span>
           </div>
           <div style={{
             width: 40, height: 40, borderRadius: 12,
             background: 'var(--accent)', color: '#fff',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 16, cursor: 'pointer', flexShrink: 0,
+            cursor: 'pointer', flexShrink: 0,
             boxShadow: '0 4px 12px rgba(99,102,241,.35)',
-          }}>⚙️</div>
+          }}>
+            <SlidersHorizontal size={18} />
+          </div>
         </div>
         <CategoryChips selected={selectedCat} onChange={setSelectedCat} />
       </div>
