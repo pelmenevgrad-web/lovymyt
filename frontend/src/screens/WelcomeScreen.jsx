@@ -7,39 +7,63 @@ import manImg    from '../assets/onboarding/man.png'
 import iceImg    from '../assets/onboarding/ice.png'
 import avatarsImg from '../assets/onboarding/avatarstats.png'
 
-const TERMS_TEXT = `Умови використання сервісу ЛовиМить
-
-Останнє оновлення: 2025 рік
+const TERMS_TEXT = `ЛовиМить — Умови використання
 
 1. Загальні положення
-Використовуючи застосунок «ЛовиМить», ви погоджуєтесь з цими Умовами використання та Політикою конфіденційності.
 
-2. Авторизація
-Для доступу до сервісу необхідна авторизація через Telegram. Ми отримуємо лише публічні дані вашого профілю (ім'я, username, мову інтерфейсу).
+1.1. ЛовиМить — платформа для пошуку компанії для спільного дозвілля через Telegram Mini App.
 
-3. Правила спільноти
-Користувачі зобов'язуються:
-• поважати інших учасників;
-• не публікувати образливий, незаконний або шкідливий контент;
-• не використовувати сервіс для спаму або шахрайства;
-• дотримуватись законодавства України.
+1.2. Використовуючи Сервіс, ви погоджуєтесь з цими Умовами. Якщо ви не згодні — не користуйтесь Сервісом.
 
-4. Організація заходів
-Організатор несе відповідальність за зміст, безпеку і виконання умов свого заходу. Сервіс є лише платформою для пошуку компанії.
+1.3. Адміністрація залишає за собою право змінювати ці Умови; істотні зміни повідомляються через бота.
 
-5. Конфіденційність
-Геолокація обробляється лише за явної згоди користувача. Ми не продаємо персональні дані третім особам.
+2. Вік користувачів
 
-6. Stars і платежі
-Внутрішня валюта Stars використовується для преміум-функцій. Купівля Stars здійснюється через Telegram Payments відповідно до їхніх умов.
+2.1. Сервіс призначений для осіб від 18 років.
 
-7. Зміни умов
-Ми можемо оновлювати ці Умови. Продовження використання сервісу після публікації змін означає їх прийняття.
+2.2. Реєструючись, ви підтверджуєте, що вам виповнилось 18 років.
+
+3. Акаунт і поведінка
+
+3.1. Один акаунт Telegram — один профіль у Сервісі.
+
+3.2. Заборонено:
+• створювати мероприятия з метою шахрайства або реклами сторонніх сервісів
+• розміщувати образливий або дискримінаційний контент
+• переслідувати чи погрожувати іншим користувачам
+• видавати себе за іншу людину
+
+3.3. За порушення Адміністрація може попередити, обмежити або заблокувати акаунт без повернення коштів.
+
+4. Платежі (Telegram Stars)
+
+4.1. Внутрішня валюта — Telegram Stars, придбання регулюється правилами Telegram.
+
+4.2. Кошти на симпатії, подарунки та PRO-підписку поверненню не підлягають.
+
+4.3. Сервіс утримує комісію 10% з переказів-подарунків між користувачами.
+
+5. Рейтинги та відгуки
+
+5.1. Відгуки можна залишати лише учасникам одного мероприятия.
+
+5.2. Заборонено використовувати систему статусів для цькування чи помсти.
+
+6. Відповідальність і безпека
+
+6.1. Сервіс є лише інструментом для пошуку компанії й не бере участі в організації зустрічей.
+
+6.2. Зустрічі відбуваються на власний розсуд і відповідальність учасників.
+
+6.3. Рекомендації: зустрічайтесь у публічних місцях, повідомляйте близьким про плани, не передавайте гроші наперед незнайомим.
+
+7. Персональні дані
+
+7.1. Геолокація використовується лише для показу мероприятий поруч і не передається третім особам.
 
 8. Контакти
-З питань звертайтесь через @lovymyt_support у Telegram.
 
-Дякуємо, що обираєте ЛовиМить!`
+8.1. Питання щодо Умов — через підтримку в боті ЛовиМить.`
 
 export default function WelcomeScreen({ onJoin }) {
   const [showTerms, setShowTerms] = useState(false)
@@ -92,7 +116,7 @@ export default function WelcomeScreen({ onJoin }) {
         <span className="welcome-bubble-text">{t.bubble1}</span>
       </div>
 
-      {/* Layer 5: main content (tagline + title + stats + CTA) */}
+      {/* Layer 5: main content (stats + centered tagline + CTA) */}
       <div style={{
         position: 'absolute',
         inset: 0,
@@ -101,30 +125,31 @@ export default function WelcomeScreen({ onJoin }) {
         flexDirection: 'column',
         padding: '0 20px',
       }}>
-        {/* Top section */}
+        {/* Stats at top */}
         <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}>
-          <p className="welcome-tagline">{t.tagline}</p>
-          <div className="welcome-title-line1" style={{ margin: 0 }}>{t.title1}</div>
-          <div className="welcome-title-line2" style={{ margin: 0 }}>{t.title2}</div>
-
-          <div style={{ marginTop: 18 }}>
-            <div className="welcome-stat-bg">
-              <img
-                src={avatarsImg}
-                alt=""
-                aria-hidden="true"
-                style={{ height: 36, width: 'auto', objectFit: 'contain' }}
-              />
-              <div>
-                <div className="welcome-stat-number">1 000+</div>
-                <div className="welcome-stat-label">{t.onlineLabel}</div>
-              </div>
+          <div className="welcome-stat-bg">
+            <img
+              src={avatarsImg}
+              alt=""
+              aria-hidden="true"
+              style={{ height: 36, width: 'auto', objectFit: 'contain' }}
+            />
+            <div>
+              <div className="welcome-stat-number">1 000+</div>
+              <div className="welcome-stat-label">{t.onlineLabel}</div>
             </div>
           </div>
         </div>
 
-        {/* Transparent spacer — photos visible through here */}
-        <div style={{ flex: 1 }} />
+        {/* Tagline centered in remaining space */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <p className="welcome-tagline-hero">{t.tagline}</p>
+        </div>
 
         {/* Bottom CTA area */}
         <div style={{

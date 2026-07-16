@@ -376,15 +376,21 @@ input:focus, textarea:focus {
 }
 .welcome-bg-planet {
   position: absolute;
-  bottom: 0;
-  left: 0;
+  inset: 0;
   width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
   z-index: 1;
   pointer-events: none;
 }
 
-/* Narrow screens: scale down title to prevent overflow */
-@media (max-width: 360px) {
-  .welcome-title-line1 { font-size: 58px; }
-  .welcome-title-line2 { font-size: 43px; }
+.welcome-tagline-hero {
+  font-family: 'Noteworthy-Light', sans-serif;
+  font-size: clamp(26px, 7.5vw, 48px);
+  color: #FFFFFF;
+  text-align: center;
+  line-height: 1.25;
+  text-shadow: 0 2px 20px rgba(0,0,0,0.4);
+  padding: 0 12px;
 }
