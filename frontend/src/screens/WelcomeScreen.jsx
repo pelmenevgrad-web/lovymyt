@@ -125,8 +125,15 @@ export default function WelcomeScreen({ onJoin }) {
         flexDirection: 'column',
         padding: '0 20px',
       }}>
-        {/* Stats at top */}
-        <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}>
+        {/* Tagline + stats at top */}
+        <div style={{
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 16,
+        }}>
+          <p className="welcome-tagline-hero">{t.tagline}</p>
           <div className="welcome-stat-bg">
             <img
               src={avatarsImg}
@@ -141,15 +148,8 @@ export default function WelcomeScreen({ onJoin }) {
           </div>
         </div>
 
-        {/* Tagline centered in remaining space */}
-        <div style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <p className="welcome-tagline-hero">{t.tagline}</p>
-        </div>
+        {/* Spacer */}
+        <div style={{ flex: 1 }} />
 
         {/* Bottom CTA area */}
         <div style={{
