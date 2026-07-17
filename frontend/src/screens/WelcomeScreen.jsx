@@ -97,8 +97,8 @@ export default function WelcomeScreen({ onJoin }) {
         const delta = pull + Math.round((Math.random() - 0.48) * 6) // slight +bias
         return Math.max(BASE - 40, Math.min(BASE + 40, prev + delta))
       })
-      // Random interval 400–700ms — feels organic
-      timerRef.current = setTimeout(tick, 400 + Math.round(Math.random() * 300))
+      // Random interval 1800–2200ms
+      timerRef.current = setTimeout(tick, 1800 + Math.round(Math.random() * 400))
     }
 
     // Start after the stats block is visible
