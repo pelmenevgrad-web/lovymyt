@@ -65,8 +65,6 @@ const TERMS_TEXT = `ЛовиМить — Умови використання
 
 8.1. Питання щодо Умов — через підтримку в боті ЛовиМить.`
 
-const FINAL_COUNT = 1000
-
 // Returns inline style for staggered fade-in
 const fi = (delay, duration = 0.55) => ({
   opacity: 0,
@@ -74,48 +72,38 @@ const fi = (delay, duration = 0.55) => ({
 })
 
 function formatCount(n) {
-  if (n >= 1000) return `${Math.floor(n / 1000)} ${String(n % 1000).padStart(3, '0')}+`
-  return `${n}+`
+  if (n >= 1000) return `${Math.floor(n / 1000)} ${String(n % 1000).padStart(3, '0')}`
+  return `${n}`
 }
+
+const BASE = 1000 // base online count
 
 export default function WelcomeScreen({ onJoin }) {
   const [showTerms, setShowTerms] = useState(false)
-  const [count, setCount]         = useState(612)
-  const frameRef                  = useRef(null)
-  const startTimerRef             = useRef(null)
+  // Start near BASE with a small random offset so each open looks slightly different
+  const [count, setCount] = useState(() => BASE + Math.round((Math.random() - 0.5) * 30))
+  const timerRef = useRef(null)
 
   const langCode = WebApp.initDataUnsafe?.user?.language_code
   const lang = langCode === 'ru' ? 'ru' : 'uk'
   const t = welcomeText[lang]
 
   useEffect(() => {
-    // Start counting when the stats block finishes fading in (~0.4s delay + 0.55s anim)
-    startTimerRef.current = setTimeout(() => {
-      const startTime = Date.now()
-      const DURATION  = 1900
-
-      const tick = () => {
-        const elapsed  = Date.now() - startTime
-        if (elapsed >= DURATION) {
-          setCount(FINAL_COUNT)
-          return
-        }
-        const progress = elapsed / DURATION
-        // Wide jitter at start, converges to FINAL_COUNT
-        const jitter = Math.round((1 - progress) * 380)
-        const next   = FINAL_COUNT + Math.round((Math.random() - 0.5) * 2 * jitter)
-        setCount(Math.max(280, Math.min(1450, next)))
-        // Interval: fast in the middle, slows near the end
-        const ms = progress < 0.65 ? 48 : 60 + Math.round(progress * 110)
-        frameRef.current = setTimeout(tick, ms)
-      }
-      tick()
-    }, 950) // wait for stats block to be visible
-
-    return () => {
-      clearTimeout(startTimerRef.current)
-      clearTimeout(frameRef.current)
+    const tick = () => {
+      setCount(prev => {
+        // ±1–4 users per tick, with slight pull back toward BASE to stay realistic
+        const drift = prev - BASE
+        const pull  = -Math.round(drift * 0.15)           // gentle pull toward center
+        const delta = pull + Math.round((Math.random() - 0.48) * 6) // slight +bias
+        return Math.max(BASE - 40, Math.min(BASE + 40, prev + delta))
+      })
+      // Random interval 400–700ms — feels organic
+      timerRef.current = setTimeout(tick, 400 + Math.round(Math.random() * 300))
     }
+
+    // Start after the stats block is visible
+    timerRef.current = setTimeout(tick, 1100)
+    return () => clearTimeout(timerRef.current)
   }, [])
 
   return (
@@ -194,7 +182,7 @@ export default function WelcomeScreen({ onJoin }) {
             <div>
               <div
                 className="welcome-stat-number"
-                style={{ minWidth: 90, display: 'inline-block', fontVariantNumeric: 'tabular-nums' }}
+                style={{ minWidth: 72, display: 'inline-block', fontVariantNumeric: 'tabular-nums' }}
               >
                 {formatCount(count)}
               </div>
