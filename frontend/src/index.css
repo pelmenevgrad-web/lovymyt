@@ -358,7 +358,7 @@ input:focus, textarea:focus {
 .welcome-photo-girl {
   position: absolute;
   right: 4%;
-  top: 42%;
+  top: 50%;
   width: 45%;
   max-width: 300px;
   max-height: 48vh;
@@ -370,7 +370,7 @@ input:focus, textarea:focus {
 .welcome-photo-guy {
   position: absolute;
   left: 2%;
-  top: 56%;
+  top: 68%;
   width: 42%;
   max-width: 260px;
   max-height: 40vh;

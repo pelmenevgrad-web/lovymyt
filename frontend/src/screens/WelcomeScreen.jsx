@@ -136,7 +136,7 @@ export default function WelcomeScreen({ onJoin }) {
       {/* Orange bubble */}
       <div
         className="welcome-bubble-orange"
-        style={{ ...fi(1.3), position: 'absolute', left: '42%', top: '63%', zIndex: 4 }}
+        style={{ ...fi(1.3), position: 'absolute', left: '25%', top: '70%', zIndex: 4 }}
       >
         <span className="welcome-bubble-text">{t.bubble2}</span>
       </div>
@@ -153,7 +153,7 @@ export default function WelcomeScreen({ onJoin }) {
       {/* Purple bubble */}
       <div
         className="welcome-bubble-purple"
-        style={{ ...fi(1.0), position: 'absolute', left: '5%', top: '41%', zIndex: 4 }}
+        style={{ ...fi(1.0), position: 'absolute', left: '36%', top: '48%', zIndex: 4 }}
       >
         <span className="welcome-bubble-text">{t.bubble1}</span>
       </div>
