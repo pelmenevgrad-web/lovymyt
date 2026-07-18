@@ -111,52 +111,6 @@ export default function WelcomeScreen({ onJoin }) {
       {/* Background — fades in first */}
       <img src={fonImg} className="welcome-bg-planet" alt="" aria-hidden="true" style={fi(0, 0.8)} />
 
-      {/* Ice — decorative */}
-      <img
-        src={iceImg}
-        alt=""
-        aria-hidden="true"
-        style={{
-          ...fi(1.05),
-          position: 'absolute', right: '5%', top: '9%',
-          width: '18%', maxWidth: 68,
-          zIndex: 2, pointerEvents: 'none',
-        }}
-      />
-
-      {/* Man with bike */}
-      <img
-        src={manImg}
-        className="welcome-photo-guy"
-        alt=""
-        aria-hidden="true"
-        style={fi(1.1)}
-      />
-
-      {/* Orange bubble */}
-      <div
-        className="welcome-bubble-orange"
-        style={{ ...fi(1.3), position: 'absolute', left: '25%', top: '70%', zIndex: 4 }}
-      >
-        <span className="welcome-bubble-text">{t.bubble2}</span>
-      </div>
-
-      {/* Girl with cocktail */}
-      <img
-        src={girlImg}
-        className="welcome-photo-girl"
-        alt=""
-        aria-hidden="true"
-        style={fi(0.75)}
-      />
-
-      {/* Purple bubble */}
-      <div
-        className="welcome-bubble-purple"
-        style={{ ...fi(1.0), position: 'absolute', left: '45%', top: '60%', zIndex: 4 }}
-      >
-        <span className="welcome-bubble-text">{t.bubble1}</span>
-      </div>
 
       {/* Main content layer */}
       <div style={{
