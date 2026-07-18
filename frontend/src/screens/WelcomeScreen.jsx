@@ -118,7 +118,7 @@ export default function WelcomeScreen({ onJoin }) {
         aria-hidden="true"
         style={{
           ...fi(1.05),
-          position: 'absolute', right: '75%', top: '45%',
+          position: 'absolute', right: '5%', top: '9%',
           width: '18%', maxWidth: 68,
           zIndex: 2, pointerEvents: 'none',
         }}
@@ -153,7 +153,7 @@ export default function WelcomeScreen({ onJoin }) {
       {/* Purple bubble */}
       <div
         className="welcome-bubble-purple"
-        style={{ ...fi(1.0), position: 'absolute', left: '36%', top: '48%', zIndex: 4 }}
+        style={{ ...fi(1.0), position: 'absolute', left: '45%', top: '60%', zIndex: 4 }}
       >
         <span className="welcome-bubble-text">{t.bubble1}</span>
       </div>
