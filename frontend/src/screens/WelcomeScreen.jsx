@@ -118,7 +118,7 @@ export default function WelcomeScreen({ onJoin }) {
         aria-hidden="true"
         style={{
           ...fi(1.05),
-          position: 'absolute', right: '2%', top: '24%',
+          position: 'absolute', right: '75%', top: '55%',
           width: '18%', maxWidth: 68,
           zIndex: 2, pointerEvents: 'none',
         }}
