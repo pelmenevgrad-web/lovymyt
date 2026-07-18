@@ -108,8 +108,8 @@ export default function WelcomeScreen({ onJoin }) {
 
   return (
     <div className="welcome-screen">
-      {/* Background planet — full screen cover */}
-      <img src={fonImg} className="welcome-bg-planet" alt="" aria-hidden="true" />
+      {/* Background — fades in first */}
+      <img src={fonImg} className="welcome-bg-planet" alt="" aria-hidden="true" style={fi(0, 0.8)} />
 
       {/* Ice — decorative */}
       <img
