@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import WebApp from '@twa-dev/sdk'
 import { welcomeText } from '../i18n/welcome.js'
-import fonImg     from '../assets/onboarding/fon.png'
+import fonImg     from '../assets/onboarding/fon2.png'
 import girlImg    from '../assets/onboarding/girl.png'
 import manImg     from '../assets/onboarding/man.png'
 import iceImg     from '../assets/onboarding/ice.png'
@@ -118,7 +118,7 @@ export default function WelcomeScreen({ onJoin }) {
         aria-hidden="true"
         style={{
           ...fi(1.05),
-          position: 'absolute', right: '75%', top: '55%',
+          position: 'absolute', right: '75%', top: '45%',
           width: '18%', maxWidth: 68,
           zIndex: 2, pointerEvents: 'none',
         }}

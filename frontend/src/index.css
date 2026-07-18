@@ -370,7 +370,7 @@ input:focus, textarea:focus {
 .welcome-photo-guy {
   position: absolute;
   left: 2%;
-  top: 68%;
+  top: 60%;
   width: 42%;
   max-width: 260px;
   max-height: 40vh;
