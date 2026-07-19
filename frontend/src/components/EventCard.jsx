@@ -1,4 +1,4 @@
-import { BadgeCheck } from 'lucide-react'
+import { BadgeCheck, Zap } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
 
 function formatTime(iso) {
@@ -61,6 +61,11 @@ export default function EventCard({ event, onClick, compact = false }) {
             <span className="badge" style={{ background: status.bg, color: status.color }}>
               {event.status === 'active' && '● '}{status.label}
             </span>
+            {event.status === 'active' && event.late_join_allowed && (
+              <span className="badge" style={{ background: 'var(--green-light)', color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                <Zap size={11} /> Можна приєднатися
+              </span>
+            )}
             {event.conditions?.verified_only && (
               <span className="badge" style={{ background: 'var(--blue-light)', color: 'var(--blue)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                 <BadgeCheck size={11} /> Верифік.

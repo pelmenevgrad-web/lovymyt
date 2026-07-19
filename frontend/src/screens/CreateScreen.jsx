@@ -38,6 +38,7 @@ export default function CreateScreen() {
     budget_type: 'free',
     age_min: '',
     age_max: '',
+    late_join_allowed: false,
     conditions: { with_pets: false, with_kids: false, verified_only: false },
   })
 
@@ -143,6 +144,22 @@ export default function CreateScreen() {
           }}
         >
           <Zap size={15} /> Прямо зараз
+        </button>
+      </Section>
+
+      {/* Late join */}
+      <Section title="Приєднання">
+        <button
+          className="chip"
+          onClick={() => set('late_join_allowed', !form.late_join_allowed)}
+          style={{
+            background: form.late_join_allowed ? 'var(--green-light)' : 'var(--card)',
+            color: form.late_join_allowed ? 'var(--green)' : 'var(--text)',
+            border: form.late_join_allowed ? '1.5px solid var(--green)' : '1.5px solid var(--border)',
+            fontWeight: form.late_join_allowed ? 700 : 500,
+          }}
+        >
+          <Zap size={15} /> Можна приєднатися, коли вже почалось
         </button>
       </Section>
 

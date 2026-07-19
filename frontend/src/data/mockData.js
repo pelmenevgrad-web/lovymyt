@@ -35,6 +35,7 @@ export const MOCK_EVENTS = [
     creator_name: 'Олексій К.',
     budget_type: 'free',
     age_min: 18, age_max: null,
+    late_join_allowed: false,
     conditions: { with_pets: false, with_kids: false, verified_only: false },
   },
   {
@@ -50,6 +51,7 @@ export const MOCK_EVENTS = [
     creator_name: 'Марія Д.',
     budget_type: 'each_pays',
     age_min: null, age_max: null,
+    late_join_allowed: true,
     conditions: { with_pets: false, with_kids: true, verified_only: false },
   },
   {
@@ -65,6 +67,7 @@ export const MOCK_EVENTS = [
     creator_name: 'Дмитро В.',
     budget_type: 'shared',
     age_min: 21, age_max: null,
+    late_join_allowed: false,
     conditions: { with_pets: true, with_kids: false, verified_only: false },
   },
   {
@@ -80,6 +83,7 @@ export const MOCK_EVENTS = [
     creator_name: 'Олена Б.',
     budget_type: 'free',
     age_min: null, age_max: null,
+    late_join_allowed: false,
     conditions: { with_pets: true, with_kids: false, verified_only: false },
   },
   {
@@ -95,6 +99,7 @@ export const MOCK_EVENTS = [
     creator_name: 'Артем М.',
     budget_type: 'free',
     age_min: null, age_max: null,
+    late_join_allowed: true,
     conditions: { with_pets: false, with_kids: true, verified_only: false },
   },
 ]

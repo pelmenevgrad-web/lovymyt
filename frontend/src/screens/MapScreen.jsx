@@ -24,10 +24,16 @@ const MARKER_ICON_PATHS = {
   6: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"></path>',
 }
 
+// Lightning-bolt badge path (lucide "Zap"), used to mark events that can
+// still be joined after they've started.
+const JOIN_BADGE_ICON = '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path>'
+
 // Pin (teardrop) shape: a square rotated -45deg with 3 rounded corners.
 // The unrotated square's center never moves, so the icon overlay just
 // needs to sit centered on that same point (no counter-rotation needed).
-function createMarker(cat, isActive) {
+// `joinableNow` marks events the creator opted to allow joining after start —
+// shown as a small pulsing badge instead of a full halo around the pin.
+function createMarker(cat, isActive, joinableNow) {
   const body = isActive ? 40 : 32
   const height = Math.round(body * 1.45)
   const centerY = height / 2
@@ -41,13 +47,16 @@ function createMarker(cat, isActive) {
     className: '',
     html: `
       <div style="position:relative; width:${body}px; height:${height}px;">
-        ${isActive ? `
+        ${joinableNow ? `
           <div style="
-            position:absolute; left:50%; top:${centerY}px; transform:translate(-50%,-50%);
-            width:${body + 12}px; height:${body + 12}px; border-radius:50%;
-            background:${cat.color}; opacity:.5;
-            animation:pulse-ring 1.8s ease-out infinite;
-          "></div>
+            position:absolute; left:50%; top:${centerY}px; margin:-${half + 3}px 0 0 ${half - 7}px;
+            width:16px; height:16px; border-radius:50%;
+            background:#22C55E; border:2px solid #fff;
+            display:flex; align-items:center; justify-content:center;
+            box-shadow:0 1px 4px rgba(0,0,0,.3);
+            animation:badge-pulse 1.8s ease-out infinite;
+            z-index:2;
+          "><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${JOIN_BADGE_ICON}</svg></div>
         ` : ''}
         <div style="
           position:absolute; left:50%; top:${centerY}px; margin:-${half}px 0 0 -${half}px;
@@ -156,11 +165,12 @@ export default function MapScreen() {
         {filtered.map((event) => {
           const cat = CATEGORIES.find(c => c.id === event.category_id) ?? CATEGORIES[1]
           const isActive = event.status === 'active'
+          const joinableNow = isActive && event.late_join_allowed
           return (
             <Marker
               key={event.id}
               position={[event.lat, event.lng]}
-              icon={createMarker(cat, isActive)}
+              icon={createMarker(cat, isActive, joinableNow)}
               eventHandlers={{ click: () => handleMarkerClick(event) }}
             />
           )
