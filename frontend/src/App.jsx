@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { CheckCircle2, XCircle, AlertTriangle, Loader2 } from 'lucide-react'
 import WebApp from '@twa-dev/sdk'
 import BottomNav from './components/BottomNav.jsx'
 import MapScreen from './screens/MapScreen.jsx'
@@ -24,7 +25,9 @@ const STEP_LABELS = {
 function Row({ ok, label, value }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 0', borderBottom: '1px solid #e2e8f0', fontSize: 13 }}>
-      <span style={{ flexShrink: 0, fontSize: 15 }}>{ok ? '✅' : '❌'}</span>
+      <span style={{ flexShrink: 0, display: 'flex', color: ok ? '#22c55e' : '#ef4444' }}>
+        {ok ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
+      </span>
       <span style={{ color: '#475569', minWidth: 180 }}>{label}</span>
       <span style={{ color: '#0f172a', fontWeight: 600, wordBreak: 'break-all' }}>{String(value)}</span>
     </div>
@@ -39,8 +42,10 @@ function InitDebug({ step, info, error }) {
       background: failed ? '#fff1f2' : '#f8fafc',
       minHeight: 'var(--full-h)', color: '#0f172a',
     }}>
-      <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 4 }}>
-        {failed ? '💥 Помилка ініціалізації' : '⏳ Ініціалізація…'}
+      <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+        {failed
+          ? <><AlertTriangle size={18} color="#dc2626" /> Помилка ініціалізації</>
+          : <><Loader2 size={18} className="spin" /> Ініціалізація…</>}
       </div>
       <div style={{
         display: 'inline-block', padding: '3px 10px', borderRadius: 999,

@@ -4,13 +4,13 @@ const now = Date.now()
 const min = 60_000
 
 export const CATEGORIES = [
-  { id: 0,  name: 'Усі',       icon: '🔥', Icon: Flame,           color: '#6366F1' },
-  { id: 1,  name: 'Спорт',     icon: '⚽', Icon: Volleyball,      color: '#22C55E' },
-  { id: 2,  name: 'Прогулки',  icon: '🚶', Icon: Footprints,      color: '#3B82F6' },
-  { id: 3,  name: 'Настолки',  icon: '🎲', Icon: Dices,           color: '#8B5CF6' },
-  { id: 4,  name: 'Барбекю',   icon: '🍖', Icon: UtensilsCrossed, color: '#F97316' },
-  { id: 5,  name: 'Концерти',  icon: '🎵', Icon: Music,           color: '#EC4899' },
-  { id: 6,  name: 'Подорожі',  icon: '✈️', Icon: Plane,           color: '#06B6D4' },
+  { id: 0,  name: 'Усі',       Icon: Flame,           color: '#6366F1' },
+  { id: 1,  name: 'Спорт',     Icon: Volleyball,      color: '#22C55E' },
+  { id: 2,  name: 'Прогулки',  Icon: Footprints,      color: '#3B82F6' },
+  { id: 3,  name: 'Настолки',  Icon: Dices,           color: '#8B5CF6' },
+  { id: 4,  name: 'Барбекю',   Icon: UtensilsCrossed, color: '#F97316' },
+  { id: 5,  name: 'Концерти',  Icon: Music,           color: '#EC4899' },
+  { id: 6,  name: 'Подорожі',  Icon: Plane,           color: '#06B6D4' },
 ]
 
 export const STATUS_META = {

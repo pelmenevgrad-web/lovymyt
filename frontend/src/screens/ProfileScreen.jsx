@@ -1,4 +1,4 @@
-import { Star, Sparkles, BadgeCheck } from 'lucide-react'
+import { Star, Sparkles, BadgeCheck, Pencil, Camera, MapPin } from 'lucide-react'
 import { MOCK_USER, MOCK_REVIEWS, MOCK_EVENTS, CATEGORIES } from '../data/mockData.js'
 import { Avatar } from '../components/EventCard.jsx'
 
@@ -43,8 +43,8 @@ function ReviewItem({ review }) {
         </div>
         <Stars rating={review.rating} />
         <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 4, lineHeight: 1.45 }}>{review.comment}</p>
-        <span style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, display: 'block' }}>
-          📍 {review.event_title}
+        <span style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          <MapPin size={11} /> {review.event_title}
         </span>
       </div>
     </div>
@@ -67,8 +67,9 @@ export default function ProfileScreen() {
           <button style={{
             background: 'rgba(255,255,255,.2)', border: 'none', borderRadius: 10,
             color: '#fff', padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', gap: 5,
           }}>
-            ✏️ Редагувати
+            <Pencil size={13} /> Редагувати
           </button>
         </div>
 
@@ -80,8 +81,10 @@ export default function ProfileScreen() {
               width: 24, height: 24, borderRadius: '50%',
               background: '#fff', border: '2px solid white',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 11,
-            }}>📷</div>
+              color: 'var(--accent)',
+            }}>
+              <Camera size={12} />
+            </div>
           </div>
 
           <div style={{ flex: 1, color: '#fff' }}>

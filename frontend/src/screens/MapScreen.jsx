@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import WebApp from '@twa-dev/sdk'
-import { LocateFixed } from 'lucide-react'
+import { LocateFixed, Check } from 'lucide-react'
 import CategoryChips from '../components/CategoryChips.jsx'
 import EventCard from '../components/EventCard.jsx'
 import { MOCK_EVENTS, CATEGORIES } from '../data/mockData.js'
@@ -219,7 +219,9 @@ export default function MapScreen() {
               style={{ width: '100%', marginTop: 10 }}
               onClick={() => setSelectedEvent(null)}
             >
-              Приєднатися 👋
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                Приєднатися <Check size={18} />
+              </span>
             </button>
           </div>
         </>

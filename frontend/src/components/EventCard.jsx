@@ -1,4 +1,4 @@
-import { BadgeCheck, Zap } from 'lucide-react'
+import { BadgeCheck, Zap, Clock, MapPin } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
 
 function formatTime(iso) {
@@ -51,10 +51,11 @@ export default function EventCard({ event, onClick, compact = false }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
         <div style={{
           width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-          background: cat.color + '22',
+          background: cat.color + '22', color: cat.color,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 22,
-        }}>{cat.icon}</div>
+        }}>
+          <cat.Icon size={22} />
+        </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
@@ -80,8 +81,8 @@ export default function EventCard({ event, onClick, compact = false }) {
 
       {/* Meta row */}
       <div style={{ display: 'flex', gap: 12, fontSize: 13, color: 'var(--text-2)', marginBottom: 10 }}>
-        <span>🕐 {formatTime(event.start_time)}</span>
-        <span>📍 {event.address_text}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={13} /> {formatTime(event.start_time)}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><MapPin size={13} /> {event.address_text}</span>
       </div>
 
       {/* Footer row */}
