@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import WebApp from '@twa-dev/sdk'
 import { welcomeText } from '../i18n/welcome.js'
 import fonImg     from '../assets/onboarding/fon2.png'
+import welcomeVideoSrc from '../assets/onboarding/welcomvideo.mp4'
 import girlImg    from '../assets/onboarding/girl.png'
 import manImg     from '../assets/onboarding/man.png'
 import iceImg     from '../assets/onboarding/ice.png'
@@ -80,6 +81,7 @@ const BASE = 1000 // base online count
 
 export default function WelcomeScreen({ onJoin }) {
   const [showTerms, setShowTerms] = useState(false)
+  const [videoReady, setVideoReady] = useState(false)
   // Start near BASE with a small random offset so each open looks slightly different
   const [count, setCount] = useState(() => BASE + Math.round((Math.random() - 0.5) * 30))
   const timerRef = useRef(null)
@@ -108,8 +110,20 @@ export default function WelcomeScreen({ onJoin }) {
 
   return (
     <div className="welcome-screen">
-      {/* Background — fades in first */}
+      {/* Background — static image fades in first, video crossfades over it once playable */}
       <img src={fonImg} className="welcome-bg-planet" alt="" aria-hidden="true" style={fi(0, 0.8)} />
+      <video
+        className="welcome-bg-video"
+        src={welcomeVideoSrc}
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        aria-hidden="true"
+        onCanPlay={() => setVideoReady(true)}
+        style={{ opacity: videoReady ? 1 : 0 }}
+      />
 
 
       {/* Main content layer */}
