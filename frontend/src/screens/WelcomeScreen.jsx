@@ -117,7 +117,6 @@ export default function WelcomeScreen({ onJoin }) {
         src={welcomeVideoSrc}
         autoPlay
         muted
-        loop
         playsInline
         preload="auto"
         aria-hidden="true"
