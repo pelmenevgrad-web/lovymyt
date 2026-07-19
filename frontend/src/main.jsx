@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css'
 import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import { AuthProvider } from './context/AuthContext.jsx'
 
 const rootEl = document.getElementById('root')
 
@@ -16,7 +17,9 @@ try {
   ReactDOM.createRoot(rootEl).render(
     <React.StrictMode>
       <ErrorBoundary>
-        <App />
+        <AuthProvider>
+          <App />
+        </AuthProvider>
       </ErrorBoundary>
     </React.StrictMode>,
   )

@@ -3,12 +3,15 @@ import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import cors from 'cors'
+import jwt from 'jsonwebtoken'
 import { Telegraf } from 'telegraf'
 import { createClient } from '@supabase/supabase-js'
+import { verifyTelegramInitData } from './telegramAuth.js'
 
 const PORT = process.env.PORT || 3000
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL
+const JWT_SECRET = process.env.JWT_SECRET
 
 const app = express()
 const httpServer = createServer(app)
@@ -38,6 +41,39 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }))
 // Telegram webhook
 app.post('/webhook', (req, res) => {
   bot.handleUpdate(req.body, res)
+})
+
+// Telegram Mini App auth: verify initData signature, upsert the user, issue a JWT
+app.post('/auth/telegram', async (req, res) => {
+  const { initData } = req.body ?? {}
+  const tgUser = verifyTelegramInitData(initData, BOT_TOKEN)
+
+  if (!tgUser) {
+    return res.status(401).json({ error: 'Invalid or expired Telegram initData' })
+  }
+
+  const { data: user, error } = await supabase
+    .from('users')
+    .upsert(
+      {
+        telegram_id: tgUser.id,
+        username: tgUser.username ?? null,
+        first_name: tgUser.first_name ?? null,
+        avatar_url: tgUser.photo_url ?? null,
+        last_active_at: new Date().toISOString(),
+      },
+      { onConflict: 'telegram_id' },
+    )
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Auth upsert failed:', error.message)
+    return res.status(500).json({ error: 'Failed to persist user' })
+  }
+
+  const token = jwt.sign({ sub: user.id, telegram_id: user.telegram_id }, JWT_SECRET, { expiresIn: '30d' })
+  res.json({ token, user })
 })
 
 // Socket.io: комнаты мероприятий (realtime-чат)
