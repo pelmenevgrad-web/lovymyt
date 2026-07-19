@@ -116,7 +116,7 @@ body {
 
 /* ── Dark map tile tint (cold blue) ── */
 [data-theme="dark"] .leaflet-tile-pane {
-  filter: hue-rotate(180deg) saturate(140%) brightness(1.15) contrast(95%);
+  filter: grayscale(1) sepia(1) hue-rotate(182deg) saturate(220%) brightness(1) contrast(100%);
 }
 
 /* ── Leaflet controls above BottomNav ── */

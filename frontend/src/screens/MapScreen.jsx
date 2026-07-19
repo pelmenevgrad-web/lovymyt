@@ -100,11 +100,10 @@ export default function MapScreen() {
 
   return (
     <div className="page-full" style={{ display: 'flex', flexDirection: 'column' }}>
-      {/* Top overlay */}
+      {/* Top overlay — chips float directly over the map, no background panel behind them */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 800,
-        paddingTop: 12, paddingBottom: 10,
-        background: 'linear-gradient(to bottom, var(--card) 70%, transparent)',
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 10,
       }}>
         <CategoryChips categories={activeCategories} selected={selectedCat} onChange={setSelectedCat} />
       </div>

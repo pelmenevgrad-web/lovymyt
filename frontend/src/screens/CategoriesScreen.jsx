@@ -36,10 +36,11 @@ export default function CategoriesScreen() {
             >
               <div style={{
                 width: 44, height: 44, borderRadius: 12,
-                background: cat.color + '22',
+                background: cat.color + '22', color: cat.color,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 22,
-              }}>{cat.icon}</div>
+              }}>
+                <cat.Icon size={22} />
+              </div>
 
               <div>
                 <div style={{ fontWeight: 700, fontSize: 15 }}>{cat.name}</div>
