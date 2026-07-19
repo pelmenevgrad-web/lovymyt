@@ -1,12 +1,12 @@
 import { CATEGORIES } from '../data/mockData.js'
 
-export default function CategoryChips({ selected, onChange }) {
+export default function CategoryChips({ categories = CATEGORIES, selected, onChange }) {
   return (
     <div style={{
       display: 'flex', gap: 8, overflowX: 'auto', padding: '0 16px',
       scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch',
     }}>
-      {CATEGORIES.map((cat) => {
+      {categories.map((cat) => {
         const active = selected === cat.id
         return (
           <button

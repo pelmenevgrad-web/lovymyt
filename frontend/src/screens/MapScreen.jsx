@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import WebApp from '@twa-dev/sdk'
-import { Search, SlidersHorizontal, LocateFixed } from 'lucide-react'
+import { LocateFixed } from 'lucide-react'
 import CategoryChips from '../components/CategoryChips.jsx'
 import EventCard from '../components/EventCard.jsx'
 import { MOCK_EVENTS, CATEGORIES } from '../data/mockData.js'
@@ -65,7 +66,8 @@ function LocateButton({ onLocate }) {
 }
 
 export default function MapScreen() {
-  const [selectedCat, setSelectedCat] = useState(0)
+  const location = useLocation()
+  const [selectedCat, setSelectedCat] = useState(() => location.state?.categoryId ?? 0)
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [isDark, setIsDark] = useState(
     document.documentElement.getAttribute('data-theme') === 'dark'
@@ -83,6 +85,12 @@ export default function MapScreen() {
     ? MOCK_EVENTS
     : MOCK_EVENTS.filter(e => e.category_id === selectedCat)
 
+  const activeCategories = CATEGORIES.filter(cat =>
+    cat.id === 0 || MOCK_EVENTS.some(e =>
+      e.category_id === cat.id && ['active', 'gathering'].includes(e.status)
+    )
+  )
+
   function handleMarkerClick(event) {
     setSelectedEvent(event)
     if (mapRef.current) {
@@ -98,26 +106,7 @@ export default function MapScreen() {
         paddingTop: 12, paddingBottom: 10,
         background: 'linear-gradient(to bottom, var(--card) 70%, transparent)',
       }}>
-        <div style={{ padding: '0 16px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            flex: 1, display: 'flex', alignItems: 'center', gap: 8,
-            background: 'var(--card)', borderRadius: 12, padding: '9px 14px',
-            boxShadow: 'var(--shadow-sm)', border: '1.5px solid var(--border)',
-          }}>
-            <Search size={16} color="var(--text-3)" />
-            <span style={{ color: 'var(--text-3)', fontSize: 14 }}>Пошук мероприятий…</span>
-          </div>
-          <div style={{
-            width: 40, height: 40, borderRadius: 12,
-            background: 'var(--accent)', color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', flexShrink: 0,
-            boxShadow: '0 4px 12px rgba(99,102,241,.35)',
-          }}>
-            <SlidersHorizontal size={18} />
-          </div>
-        </div>
-        <CategoryChips selected={selectedCat} onChange={setSelectedCat} />
+        <CategoryChips categories={activeCategories} selected={selectedCat} onChange={setSelectedCat} />
       </div>
 
       {/* Map */}

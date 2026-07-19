@@ -1,15 +1,20 @@
+import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Map, Plus, User } from 'lucide-react'
+import { Map, LayoutGrid, Plus, MessageCircle, User } from 'lucide-react'
 
 const TABS = [
-  { path: '/',        Icon: Map,  label: 'Карта' },
-  { path: '/create',  Icon: Plus, label: 'Створити', accent: true },
-  { path: '/profile', Icon: User, label: 'Профіль' },
+  { path: '/',           Icon: Map,           label: 'Карта' },
+  { path: '/categories', Icon: LayoutGrid,    label: 'Категорії' },
+  { path: '/create',     Icon: Plus,          label: 'Створити', accent: true },
+  { path: '/chats',      Icon: MessageCircle, label: 'Чати', badge: true },
+  { path: '/profile',    Icon: User,          label: 'Профіль' },
 ]
 
 export default function BottomNav() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  // TODO: замінити на реальні дані непрочитаних чатів із Supabase
+  const [hasUnreadChats] = useState(true)
 
   return (
     <nav style={{
@@ -23,7 +28,7 @@ export default function BottomNav() {
       zIndex: 500,
       boxShadow: '0 -4px 20px rgba(0,0,0,.07)',
     }}>
-      {TABS.map(({ path, Icon, label, accent }) => {
+      {TABS.map(({ path, Icon, label, accent, badge }) => {
         const active = pathname === path
         return (
           <button
@@ -48,7 +53,16 @@ export default function BottomNav() {
                 <Icon size={22} />
               </span>
             ) : (
-              <Icon size={22} color={active ? 'var(--accent)' : 'var(--text-3)'} />
+              <span style={{ position: 'relative', display: 'flex' }}>
+                <Icon size={22} color={active ? 'var(--accent)' : 'var(--text-3)'} />
+                {badge && hasUnreadChats && (
+                  <span style={{
+                    position: 'absolute', top: -2, right: -2,
+                    width: 9, height: 9, borderRadius: '50%',
+                    background: '#EF4444', border: '1.5px solid var(--card)',
+                  }} />
+                )}
+              </span>
             )}
             <span style={{
               fontSize: 10, fontWeight: 600,
