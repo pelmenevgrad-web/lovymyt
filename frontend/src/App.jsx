@@ -7,6 +7,7 @@ import MapScreen from './screens/MapScreen.jsx'
 import CategoriesScreen from './screens/CategoriesScreen.jsx'
 import ChatsScreen from './screens/ChatsScreen.jsx'
 import ProfileScreen from './screens/ProfileScreen.jsx'
+import EditProfileScreen from './screens/EditProfileScreen.jsx'
 import CreateScreen from './screens/CreateScreen.jsx'
 import WelcomeScreen from './screens/WelcomeScreen.jsx'
 
@@ -154,6 +155,7 @@ export default function App() {
         <Route path="/categories" element={<WithNav><CategoriesScreen /></WithNav>} />
         <Route path="/chats"      element={<WithNav><ChatsScreen /></WithNav>} />
         <Route path="/profile"    element={<WithNav><ProfileScreen /></WithNav>} />
+        <Route path="/profile/edit" element={<EditProfileScreen />} />
         <Route path="/create"     element={<CreateScreen />} />
       </Routes>
     </MemoryRouter>

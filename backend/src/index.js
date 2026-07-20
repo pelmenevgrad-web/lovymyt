@@ -76,6 +76,54 @@ app.post('/auth/telegram', async (req, res) => {
   res.json({ token, user })
 })
 
+// Requires a valid `Authorization: Bearer <jwt>` issued by /auth/telegram
+function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization ?? ''
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+
+  if (!token) {
+    return res.status(401).json({ error: 'Missing bearer token' })
+  }
+
+  try {
+    req.auth = jwt.verify(token, JWT_SECRET)
+    next()
+  } catch {
+    res.status(401).json({ error: 'Invalid or expired token' })
+  }
+}
+
+// Update the authenticated user's own editable profile fields
+app.patch('/users/me', requireAuth, async (req, res) => {
+  const { bio } = req.body ?? {}
+  const patch = {}
+
+  if (bio !== undefined) {
+    if (typeof bio !== 'string' || bio.length > 300) {
+      return res.status(400).json({ error: 'bio must be a string up to 300 characters' })
+    }
+    patch.bio = bio.trim() || null
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ error: 'No editable fields provided' })
+  }
+
+  const { data: user, error } = await supabase
+    .from('users')
+    .update(patch)
+    .eq('id', req.auth.sub)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Profile update failed:', error.message)
+    return res.status(500).json({ error: 'Failed to update profile' })
+  }
+
+  res.json({ user })
+})
+
 // Socket.io: комнаты мероприятий (realtime-чат)
 io.on('connection', (socket) => {
   socket.on('join_event', (eventId) => {

@@ -1,4 +1,5 @@
-import { Star, Sparkles, BadgeCheck, Pencil, Camera, Loader2, AlertTriangle, Smartphone } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/EventCard.jsx'
 
@@ -45,6 +46,7 @@ function CenteredMessage({ icon: Icon, title, text }) {
 }
 
 export default function ProfileScreen() {
+  const navigate = useNavigate()
   const { user, status, error } = useAuth()
 
   if (status === 'pending') {
@@ -84,32 +86,24 @@ export default function ProfileScreen() {
       {/* Hero */}
       <div style={{
         background: 'linear-gradient(135deg, var(--accent) 0%, #8B5CF6 100%)',
-        padding: '32px 20px 80px',
+        padding: '20px 20px 18px',
         position: 'relative',
       }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
-          <button style={{
-            background: 'rgba(255,255,255,.2)', border: 'none', borderRadius: 10,
-            color: '#fff', padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-          }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+          <button
+            onClick={() => navigate('/profile/edit')}
+            style={{
+              background: 'rgba(255,255,255,.2)', border: 'none', borderRadius: 10,
+              color: '#fff', padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+            }}
+          >
             <Pencil size={13} /> Редагувати
           </button>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14 }}>
-          <div style={{ position: 'relative' }}>
-            <Avatar name={user.first_name} url={user.avatar_url} size={80} />
-            <div style={{
-              position: 'absolute', bottom: 0, right: 0,
-              width: 24, height: 24, borderRadius: '50%',
-              background: '#fff', border: '2px solid white',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--accent)',
-            }}>
-              <Camera size={12} />
-            </div>
-          </div>
+          <Avatar name={user.first_name} url={user.avatar_url} size={72} />
 
           <div style={{ flex: 1, color: '#fff' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -139,8 +133,8 @@ export default function ProfileScreen() {
         </div>
       </div>
 
-      {/* Stats row — overlaps hero */}
-      <div style={{ padding: '0 16px', marginTop: -44 }}>
+      {/* Stats row */}
+      <div style={{ padding: '14px 16px 0' }}>
         <div style={{ display: 'flex', gap: 8 }}>
           <StatBlock value={user.events_created_count} label="Організував" />
           <StatBlock value={user.events_joined_count} label="Взяв участь" />
