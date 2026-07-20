@@ -6,7 +6,8 @@ import WebApp from '@twa-dev/sdk'
 import { LocateFixed, Check } from 'lucide-react'
 import CategoryChips from '../components/CategoryChips.jsx'
 import EventCard from '../components/EventCard.jsx'
-import { MOCK_EVENTS, CATEGORIES } from '../data/mockData.js'
+import { apiFetch } from '../lib/api.js'
+import { CATEGORIES } from '../data/mockData.js'
 
 // Kyiv center as default
 const DEFAULT_CENTER = [50.4501, 30.5234]
@@ -112,6 +113,7 @@ export default function MapScreen() {
     document.documentElement.getAttribute('data-theme') === 'dark'
   )
   const mapRef = useRef(null)
+  const [events, setEvents] = useState([])
 
   useEffect(() => {
     const onTheme = () =>
@@ -120,12 +122,18 @@ export default function MapScreen() {
     return () => WebApp.offEvent('themeChanged', onTheme)
   }, [])
 
+  useEffect(() => {
+    apiFetch('/events')
+      .then(({ events }) => setEvents(events))
+      .catch(err => console.error('[Map] failed to load events:', err.message))
+  }, [])
+
   const filtered = selectedCat === 0
-    ? MOCK_EVENTS
-    : MOCK_EVENTS.filter(e => e.category_id === selectedCat)
+    ? events
+    : events.filter(e => e.category_id === selectedCat)
 
   const activeCategories = CATEGORIES.filter(cat =>
-    cat.id === 0 || MOCK_EVENTS.some(e =>
+    cat.id === 0 || events.some(e =>
       e.category_id === cat.id && ['active', 'gathering'].includes(e.status)
     )
   )

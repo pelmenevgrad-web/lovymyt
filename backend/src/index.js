@@ -124,6 +124,79 @@ app.patch('/users/me', requireAuth, async (req, res) => {
   res.json({ user })
 })
 
+// Shapes a DB row (with embedded creator/participant count) into the flat
+// object shape the frontend already works with (same fields as the old mocks).
+function shapeEvent(row) {
+  const { late_join_allowed, ...conditions } = row.conditions ?? {}
+  return {
+    id: row.id,
+    title: row.title,
+    category_id: row.category_id,
+    status: row.status,
+    start_time: row.start_time,
+    lat: row.lat,
+    lng: row.lng,
+    address_text: row.address_text,
+    max_participants: row.max_participants,
+    current_participants: row.participants?.[0]?.count ?? 0,
+    creator_name: row.creator?.first_name ?? 'Користувач',
+    budget_type: row.budget_type,
+    age_min: row.age_min,
+    age_max: row.age_max,
+    late_join_allowed: late_join_allowed ?? false,
+    conditions,
+  }
+}
+
+// Public list of upcoming/in-progress events for the map
+app.get('/events', async (_req, res) => {
+  const { data, error } = await supabase
+    .from('events')
+    .select('*, creator:users(first_name), participants:event_participants(count)')
+    .in('status', ['planned', 'gathering', 'active'])
+    .order('start_time', { ascending: true })
+
+  if (error) {
+    console.error('Fetching events failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load events' })
+  }
+
+  res.json({ events: data.map(shapeEvent) })
+})
+
+// Create a new event owned by the authenticated user
+app.post('/events', requireAuth, async (req, res) => {
+  const {
+    category_id, title, address_text, start_time, lat, lng,
+    max_participants, min_participants, budget_type,
+    age_min, age_max, late_join_allowed, conditions,
+  } = req.body ?? {}
+
+  if (!category_id || !title?.trim() || !address_text?.trim() || !start_time || lat == null || lng == null) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+
+  const { data: row, error } = await supabase
+    .from('events')
+    .insert({
+      creator_id: req.auth.sub,
+      category_id, title: title.trim(), address_text: address_text.trim(),
+      start_time, lat, lng,
+      max_participants, min_participants, budget_type,
+      age_min: age_min || null, age_max: age_max || null,
+      conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
+    })
+    .select('*, creator:users(first_name), participants:event_participants(count)')
+    .single()
+
+  if (error) {
+    console.error('Creating event failed:', error.message)
+    return res.status(500).json({ error: 'Failed to create event' })
+  }
+
+  res.status(201).json({ event: shapeEvent(row) })
+})
+
 // Socket.io: комнаты мероприятий (realtime-чат)
 io.on('connection', (socket) => {
   socket.on('join_event', (eventId) => {

@@ -2,6 +2,12 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, MapPin, Zap } from 'lucide-react'
 import { CATEGORIES } from '../data/mockData.js'
+import { apiFetch } from '../lib/api.js'
+
+// Kyiv center — placeholder until the map location picker is built (the
+// "Вибрати точку на карті" button below is still a stub).
+const DEFAULT_LAT = 50.4501
+const DEFAULT_LNG = 30.5234
 
 const BUDGET_OPTIONS = [
   { value: 'free',      Icon: Gift,       label: 'Безкоштовно' },
@@ -42,6 +48,9 @@ export default function CreateScreen() {
     conditions: { with_pets: false, with_kids: false, verified_only: false },
   })
 
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
+
   const set = (key, value) => setForm(f => ({ ...f, [key]: value }))
   const toggleCond = (key) => setForm(f => ({
     ...f, conditions: { ...f.conditions, [key]: !f.conditions[key] }
@@ -49,10 +58,35 @@ export default function CreateScreen() {
 
   const canSubmit = form.category_id !== null && form.title.trim() && form.address_text.trim() && form.start_time
 
-  function handleCreate() {
-    if (!canSubmit) return
-    alert(`Мероприятие "${form.title}" створено! (mock)`)
-    navigate('/')
+  async function handleCreate() {
+    if (!canSubmit || submitting) return
+    setSubmitting(true)
+    setSubmitError(null)
+    try {
+      await apiFetch('/events', {
+        method: 'POST',
+        body: JSON.stringify({
+          category_id: form.category_id,
+          title: form.title,
+          address_text: form.address_text,
+          start_time: new Date(form.start_time).toISOString(),
+          lat: DEFAULT_LAT,
+          lng: DEFAULT_LNG,
+          max_participants: form.max_participants,
+          min_participants: form.min_participants,
+          budget_type: form.budget_type,
+          age_min: form.age_min ? Number(form.age_min) : null,
+          age_max: form.age_max ? Number(form.age_max) : null,
+          late_join_allowed: form.late_join_allowed,
+          conditions: form.conditions,
+        }),
+      })
+      navigate('/')
+    } catch (err) {
+      setSubmitError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -251,14 +285,17 @@ export default function CreateScreen() {
 
       {/* Submit */}
       <div style={{ padding: '8px 16px 24px' }}>
+        {submitError && (
+          <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 8, textAlign: 'center' }}>{submitError}</div>
+        )}
         <button
           className="btn btn-primary"
-          style={{ width: '100%', fontSize: 16, padding: '16px', opacity: canSubmit ? 1 : .45 }}
-          disabled={!canSubmit}
+          style={{ width: '100%', fontSize: 16, padding: '16px', opacity: canSubmit && !submitting ? 1 : .45 }}
+          disabled={!canSubmit || submitting}
           onClick={handleCreate}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-            Створити і відкрити чат <Rocket size={18} />
+            {submitting ? 'Створюємо…' : <>Створити і відкрити чат <Rocket size={18} /></>}
           </span>
         </button>
       </div>
