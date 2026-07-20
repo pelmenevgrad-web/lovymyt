@@ -140,6 +140,7 @@ function shapeEvent(row) {
     max_participants: row.max_participants,
     current_participants: row.participants?.[0]?.count ?? 0,
     creator_name: row.creator?.first_name ?? 'Користувач',
+    creator_avatar_url: row.creator?.avatar_url ?? null,
     budget_type: row.budget_type,
     age_min: row.age_min,
     age_max: row.age_max,
@@ -152,7 +153,7 @@ function shapeEvent(row) {
 app.get('/events', async (_req, res) => {
   const { data, error } = await supabase
     .from('events')
-    .select('*, creator:users(first_name), participants:event_participants(count)')
+    .select('*, creator:users(first_name, avatar_url), participants:event_participants(count)')
     .in('status', ['planned', 'gathering', 'active'])
     .order('start_time', { ascending: true })
 
@@ -186,7 +187,7 @@ app.post('/events', requireAuth, async (req, res) => {
       age_min: age_min || null, age_max: age_max || null,
       conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
     })
-    .select('*, creator:users(first_name), participants:event_participants(count)')
+    .select('*, creator:users(first_name, avatar_url), participants:event_participants(count)')
     .single()
 
   if (error) {

@@ -123,7 +123,7 @@ export default function CreateScreen() {
     const controller = new AbortController()
     setSearching(true)
     const timer = setTimeout(() => {
-      fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=ua&q=${encodeURIComponent(query)}`, {
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=ua&q=${encodeURIComponent(query)}`, {
         signal: controller.signal,
       })
         .then(r => r.json())
@@ -134,10 +134,21 @@ export default function CreateScreen() {
     return () => { clearTimeout(timer); controller.abort() }
   }, [form.address_text])
 
+  // "Київська обл., Києво-Святошинський р-н, м. Київ, вул. Хрещатик, 15, 01001"
+  // → "Київ, вул. Хрещатик 15" — just locality + street + house number
+  function formatShortAddress(result) {
+    const a = result.address ?? {}
+    const locality = a.city ?? a.town ?? a.village ?? a.municipality ?? a.county ?? ''
+    const street = a.road ?? a.pedestrian ?? a.footway ?? ''
+    const streetPart = [street, a.house_number].filter(Boolean).join(' ')
+    const parts = [locality, streetPart].filter(Boolean)
+    return parts.length > 0 ? parts.join(', ') : result.display_name
+  }
+
   function selectSuggestion(result) {
     const lat = parseFloat(result.lat)
     const lng = parseFloat(result.lon)
-    setForm(f => ({ ...f, address_text: result.display_name, lat, lng }))
+    setForm(f => ({ ...f, address_text: formatShortAddress(result), lat, lng }))
     setSuggestions([])
     pickerMapRef.current?.flyTo([lat, lng], 15)
   }

@@ -88,7 +88,7 @@ export default function EventCard({ event, onClick, compact = false }) {
       {/* Footer row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Avatar name={event.creator_name} size={24} />
+          <Avatar name={event.creator_name} url={event.creator_avatar_url} size={24} />
           <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 500 }}>{event.creator_name}</span>
         </div>
 
