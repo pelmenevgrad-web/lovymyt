@@ -1,13 +1,51 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, MapPin, Zap } from 'lucide-react'
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
+import L from 'leaflet'
+import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Zap } from 'lucide-react'
 import { CATEGORIES } from '../data/mockData.js'
 import { apiFetch } from '../lib/api.js'
 
-// Kyiv center — placeholder until the map location picker is built (the
-// "Вибрати точку на карті" button below is still a stub).
-const DEFAULT_LAT = 50.4501
-const DEFAULT_LNG = 30.5234
+// Kyiv center — initial position for the location picker below
+const INITIAL_LAT = 50.4501
+const INITIAL_LNG = 30.5234
+
+const pickerIcon = L.divIcon({
+  className: '',
+  html: `<div style="width:22px;height:22px;border-radius:50%;background:var(--accent);border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);"></div>`,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+})
+
+function LocationPicker({ lat, lng, onChange }) {
+  function ClickCapture() {
+    useMapEvents({ click: (e) => onChange(e.latlng.lat, e.latlng.lng) })
+    return null
+  }
+
+  return (
+    <MapContainer
+      center={[lat, lng]}
+      zoom={13}
+      style={{ height: 180, width: '100%', borderRadius: 'var(--radius-md)', marginTop: 8 }}
+      zoomControl={false}
+    >
+      <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="" />
+      <ClickCapture />
+      <Marker
+        position={[lat, lng]}
+        icon={pickerIcon}
+        draggable
+        eventHandlers={{
+          dragend: (e) => {
+            const p = e.target.getLatLng()
+            onChange(p.lat, p.lng)
+          },
+        }}
+      />
+    </MapContainer>
+  )
+}
 
 const BUDGET_OPTIONS = [
   { value: 'free',      Icon: Gift,       label: 'Безкоштовно' },
@@ -44,6 +82,8 @@ export default function CreateScreen() {
     budget_type: 'free',
     age_min: '',
     age_max: '',
+    lat: INITIAL_LAT,
+    lng: INITIAL_LNG,
     late_join_allowed: false,
     conditions: { with_pets: false, with_kids: false, verified_only: false },
   })
@@ -70,8 +110,8 @@ export default function CreateScreen() {
           title: form.title,
           address_text: form.address_text,
           start_time: new Date(form.start_time).toISOString(),
-          lat: DEFAULT_LAT,
-          lng: DEFAULT_LNG,
+          lat: form.lat,
+          lng: form.lng,
           max_participants: form.max_participants,
           min_participants: form.min_participants,
           budget_type: form.budget_type,
@@ -146,19 +186,14 @@ export default function CreateScreen() {
           value={form.address_text}
           onChange={e => set('address_text', e.target.value)}
         />
-        <div
-          style={{
-            marginTop: 8, height: 120, borderRadius: 'var(--radius-md)',
-            background: 'linear-gradient(135deg, #E0E7FF, #DDD6FE)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'column', gap: 6, cursor: 'pointer',
-            border: '1.5px dashed var(--accent)',
-          }}
-          onClick={() => alert('Picker карти буде тут')}
-        >
-          <MapPin size={28} color="var(--accent)" />
-          <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>Вибрати точку на карті</span>
+        <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>
+          Торкнись карти або перетягни мітку, щоб вибрати точку
         </div>
+        <LocationPicker
+          lat={form.lat}
+          lng={form.lng}
+          onChange={(lat, lng) => setForm(f => ({ ...f, lat, lng }))}
+        />
       </Section>
 
       {/* Date/time */}
