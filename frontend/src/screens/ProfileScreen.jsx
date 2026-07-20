@@ -1,5 +1,5 @@
-import { Star, Sparkles, BadgeCheck, Pencil, Camera, MapPin } from 'lucide-react'
-import { MOCK_USER, MOCK_REVIEWS, MOCK_EVENTS, CATEGORIES } from '../data/mockData.js'
+import { Star, Sparkles, BadgeCheck, Pencil, Camera, Loader2, AlertTriangle, Smartphone } from 'lucide-react'
+import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/EventCard.jsx'
 
 function Stars({ rating }) {
@@ -31,29 +31,53 @@ function StatBlock({ value, label }) {
   )
 }
 
-function ReviewItem({ review }) {
-  const date = new Date(review.created_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })
+function CenteredMessage({ icon: Icon, title, text }) {
   return (
-    <div style={{ display: 'flex', gap: 10, padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
-      <Avatar name={review.from_name} size={40} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-          <span style={{ fontWeight: 700, fontSize: 14 }}>{review.from_name}</span>
-          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{date}</span>
-        </div>
-        <Stars rating={review.rating} />
-        <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 4, lineHeight: 1.45 }}>{review.comment}</p>
-        <span style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-          <MapPin size={11} /> {review.event_title}
-        </span>
-      </div>
+    <div className="page" style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: 10, minHeight: '60vh', padding: '0 32px', textAlign: 'center',
+    }}>
+      <Icon size={28} color="var(--text-3)" />
+      <div style={{ fontWeight: 700, fontSize: 15 }}>{title}</div>
+      {text && <div style={{ fontSize: 13, color: 'var(--text-2)' }}>{text}</div>}
     </div>
   )
 }
 
 export default function ProfileScreen() {
-  const user = MOCK_USER
-  const myEvents = MOCK_EVENTS.slice(0, 3)
+  const { user, status } = useAuth()
+
+  if (status === 'pending') {
+    return (
+      <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+        <Loader2 size={28} className="spin" color="var(--text-3)" />
+      </div>
+    )
+  }
+
+  if (status === 'guest') {
+    return (
+      <CenteredMessage
+        icon={Smartphone}
+        title="Відкрий у Telegram"
+        text="Профіль показує дані твого Telegram-акаунту — доступно тільки всередині застосунку."
+      />
+    )
+  }
+
+  if (status === 'error' || !user) {
+    return (
+      <CenteredMessage
+        icon={AlertTriangle}
+        title="Не вдалося завантажити профіль"
+        text="Спробуй закрити і знову відкрити застосунок."
+      />
+    )
+  }
+
+  const reliability = user.events_joined_count > 0
+    ? `${Math.round((1 - user.no_show_count / user.events_joined_count) * 100)}%`
+    : '—'
 
   return (
     <div className="page">
@@ -75,7 +99,7 @@ export default function ProfileScreen() {
 
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14 }}>
           <div style={{ position: 'relative' }}>
-            <Avatar name={`${user.first_name} ${user.last_name}`} size={80} />
+            <Avatar name={user.first_name} url={user.avatar_url} size={80} />
             <div style={{
               position: 'absolute', bottom: 0, right: 0,
               width: 24, height: 24, borderRadius: '50%',
@@ -90,11 +114,11 @@ export default function ProfileScreen() {
           <div style={{ flex: 1, color: '#fff' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 22, fontWeight: 800 }}>
-                {user.first_name} {user.last_name}
+                {user.first_name || 'Користувач'}
               </span>
             </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: 12, opacity: .85 }}>@{user.username}</span>
+              {user.username && <span style={{ fontSize: 12, opacity: .85 }}>@{user.username}</span>}
               {user.is_verified && (
                 <span className="badge" style={{ background: 'rgba(255,255,255,.25)', color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                   <BadgeCheck size={13} /> Верифікований
@@ -120,7 +144,7 @@ export default function ProfileScreen() {
         <div style={{ display: 'flex', gap: 8 }}>
           <StatBlock value={user.events_created_count} label="Організував" />
           <StatBlock value={user.events_joined_count} label="Взяв участь" />
-          <StatBlock value={`${Math.round((1 - user.no_show_count / user.events_joined_count) * 100)}%`} label="Надійність" />
+          <StatBlock value={reliability} label="Надійність" />
         </div>
       </div>
 
@@ -172,25 +196,8 @@ export default function ProfileScreen() {
       {/* My events */}
       <div style={{ padding: '20px 16px 0' }}>
         <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 12 }}>Мої мероприятия</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {myEvents.map(e => {
-            const cat = CATEGORIES.find(c => c.id === e.category_id)
-            const CatIcon = cat?.Icon
-            return (
-              <div key={e.id} className="card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ color: cat?.color, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {CatIcon && <CatIcon size={22} />}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
-                    {new Date(e.start_time).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
-                <span style={{ fontSize: 18, color: 'var(--text-3)' }}>›</span>
-              </div>
-            )
-          })}
+        <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
+          Поки що немає — створи перше мероприятие через кнопку «Створити».
         </div>
       </div>
 
@@ -199,8 +206,8 @@ export default function ProfileScreen() {
         <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 4 }}>
           Відгуки <span style={{ color: 'var(--text-3)', fontWeight: 500, fontSize: 14 }}>({user.rating_count})</span>
         </div>
-        <div className="card" style={{ padding: '0 14px' }}>
-          {MOCK_REVIEWS.map(r => <ReviewItem key={r.id} review={r} />)}
+        <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
+          Поки що немає відгуків.
         </div>
       </div>
 
