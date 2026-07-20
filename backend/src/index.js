@@ -93,6 +93,19 @@ function requireAuth(req, res, next) {
   }
 }
 
+// Like requireAuth, but doesn't reject when there's no/invalid token —
+// used by public routes that want to know who's asking, if anyone.
+function tryAuth(req) {
+  const authHeader = req.headers.authorization ?? ''
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (!token) return null
+  try {
+    return jwt.verify(token, JWT_SECRET)
+  } catch {
+    return null
+  }
+}
+
 // Update the authenticated user's own editable profile fields
 app.patch('/users/me', requireAuth, async (req, res) => {
   const { bio } = req.body ?? {}
@@ -196,6 +209,62 @@ app.post('/events', requireAuth, async (req, res) => {
   }
 
   res.status(201).json({ event: shapeEvent(row) })
+})
+
+// Single event's full detail — includes the caller's own participation
+// status (if authenticated) so the detail page knows whether to show
+// "Приєднатися" or "Ви вже приєднались".
+app.get('/events/:id', async (req, res) => {
+  const { data, error } = await supabase
+    .from('events')
+    .select('*, creator:users(first_name, avatar_url), participants:event_participants(count)')
+    .eq('id', req.params.id)
+    .single()
+
+  if (error) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+
+  const auth = tryAuth(req)
+  let myStatus = null
+  if (auth) {
+    const { data: participant } = await supabase
+      .from('event_participants')
+      .select('status')
+      .eq('event_id', req.params.id)
+      .eq('user_id', auth.sub)
+      .maybeSingle()
+    myStatus = participant?.status ?? null
+  }
+
+  res.json({
+    event: {
+      ...shapeEvent(data),
+      description: data.description,
+      min_participants: data.min_participants,
+      is_creator: auth?.sub === data.creator_id,
+      my_status: myStatus,
+    },
+  })
+})
+
+// Join an event — instant acceptance for now (no organizer approval step yet)
+app.post('/events/:id/join', requireAuth, async (req, res) => {
+  const { data, error } = await supabase
+    .from('event_participants')
+    .upsert(
+      { event_id: req.params.id, user_id: req.auth.sub, status: 'accepted' },
+      { onConflict: 'event_id,user_id' },
+    )
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Join failed:', error.message)
+    return res.status(500).json({ error: 'Failed to join event' })
+  }
+
+  res.json({ participant: data })
 })
 
 // Socket.io: кімнати заходів (realtime-чат)

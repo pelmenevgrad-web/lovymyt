@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import WebApp from '@twa-dev/sdk'
@@ -107,8 +107,12 @@ function LocateButton({ onLocate }) {
 
 export default function MapScreen() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [selectedCat, setSelectedCat] = useState(() => location.state?.categoryId ?? 0)
   const [selectedEvent, setSelectedEvent] = useState(null)
+  const [joining, setJoining] = useState(false)
+  const [joinError, setJoinError] = useState(null)
+  const [joinedIds, setJoinedIds] = useState(() => new Set())
   const [isDark, setIsDark] = useState(
     document.documentElement.getAttribute('data-theme') === 'dark'
   )
@@ -146,8 +150,28 @@ export default function MapScreen() {
 
   function handleMarkerClick(event) {
     setSelectedEvent(event)
+    setJoinError(null)
     if (mapRef.current) {
       mapRef.current.panTo([event.lat, event.lng], { animate: true, duration: 0.4 })
+    }
+  }
+
+  async function handleJoin() {
+    if (joining || !selectedEvent || joinedIds.has(selectedEvent.id)) return
+    setJoining(true)
+    setJoinError(null)
+    try {
+      await apiFetch(`/events/${selectedEvent.id}/join`, { method: 'POST' })
+      const joinedId = selectedEvent.id
+      setJoinedIds(prev => new Set(prev).add(joinedId))
+      setEvents(evs => evs.map(e => e.id === joinedId
+        ? { ...e, current_participants: e.current_participants + 1 }
+        : e))
+      setSelectedEvent(null)
+    } catch (err) {
+      setJoinError(err.message)
+    } finally {
+      setJoining(false)
     }
   }
 
@@ -225,16 +249,21 @@ export default function MapScreen() {
 
             <EventCard
               event={selectedEvent}
-              onClick={() => {}}
+              onClick={() => navigate(`/events/${selectedEvent.id}`)}
             />
+
+            {joinError && (
+              <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 8, textAlign: 'center' }}>{joinError}</div>
+            )}
 
             <button
               className="btn btn-primary"
-              style={{ width: '100%', marginTop: 10 }}
-              onClick={() => setSelectedEvent(null)}
+              style={{ width: '100%', marginTop: 10, opacity: joining ? .6 : 1 }}
+              disabled={joining}
+              onClick={handleJoin}
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                Приєднатися <Check size={18} />
+                {joining ? 'Приєднуємось…' : <>Приєднатися <Check size={18} /></>}
               </span>
             </button>
           </div>
