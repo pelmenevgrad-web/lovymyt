@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
-import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Zap } from 'lucide-react'
+import WebApp from '@twa-dev/sdk'
+import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Zap, Search } from 'lucide-react'
 import { CATEGORIES } from '../data/mockData.js'
 import { apiFetch } from '../lib/api.js'
 
@@ -17,7 +18,7 @@ const pickerIcon = L.divIcon({
   iconAnchor: [11, 11],
 })
 
-function LocationPicker({ lat, lng, onChange }) {
+function LocationPicker({ lat, lng, onChange, isDark, mapRef }) {
   function ClickCapture() {
     useMapEvents({ click: (e) => onChange(e.latlng.lat, e.latlng.lng) })
     return null
@@ -25,12 +26,18 @@ function LocationPicker({ lat, lng, onChange }) {
 
   return (
     <MapContainer
+      ref={mapRef}
       center={[lat, lng]}
       zoom={13}
       style={{ height: 180, width: '100%', borderRadius: 'var(--radius-md)', marginTop: 8 }}
       zoomControl={false}
     >
-      <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="" />
+      <TileLayer
+        url={isDark
+          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
+        attribution=""
+      />
       <ClickCapture />
       <Marker
         position={[lat, lng]}
@@ -90,6 +97,50 @@ export default function CreateScreen() {
 
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
+
+  const [isDark, setIsDark] = useState(
+    document.documentElement.getAttribute('data-theme') === 'dark'
+  )
+  const [suggestions, setSuggestions] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [addressFocused, setAddressFocused] = useState(false)
+  const pickerMapRef = useRef(null)
+
+  useEffect(() => {
+    const onTheme = () =>
+      setIsDark(document.documentElement.getAttribute('data-theme') === 'dark')
+    WebApp.onEvent('themeChanged', onTheme)
+    return () => WebApp.offEvent('themeChanged', onTheme)
+  }, [])
+
+  // Debounced address search via Nominatim (OpenStreetMap geocoder)
+  useEffect(() => {
+    const query = form.address_text.trim()
+    if (query.length < 3) {
+      setSuggestions([])
+      return
+    }
+    const controller = new AbortController()
+    setSearching(true)
+    const timer = setTimeout(() => {
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=ua&q=${encodeURIComponent(query)}`, {
+        signal: controller.signal,
+      })
+        .then(r => r.json())
+        .then(results => setSuggestions(results))
+        .catch(() => {})
+        .finally(() => setSearching(false))
+    }, 500)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [form.address_text])
+
+  function selectSuggestion(result) {
+    const lat = parseFloat(result.lat)
+    const lng = parseFloat(result.lon)
+    setForm(f => ({ ...f, address_text: result.display_name, lat, lng }))
+    setSuggestions([])
+    pickerMapRef.current?.flyTo([lat, lng], 15)
+  }
 
   const set = (key, value) => setForm(f => ({ ...f, [key]: value }))
   const toggleCond = (key) => setForm(f => ({
@@ -180,18 +231,53 @@ export default function CreateScreen() {
 
       {/* Location */}
       <Section title="Місце">
-        <input
-          type="text"
-          placeholder="Адреса або назва місця"
-          value={form.address_text}
-          onChange={e => set('address_text', e.target.value)}
-        />
+        <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={16} color="var(--text-3)" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
+            <input
+              type="text"
+              placeholder="Адреса або назва місця"
+              value={form.address_text}
+              onChange={e => set('address_text', e.target.value)}
+              onFocus={() => setAddressFocused(true)}
+              onBlur={() => setTimeout(() => setAddressFocused(false), 150)}
+              style={{ paddingLeft: 38 }}
+            />
+          </div>
+
+          {addressFocused && (searching || suggestions.length > 0) && (
+            <div className="card" style={{
+              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+              marginTop: 4, maxHeight: 220, overflowY: 'auto', padding: '4px 0',
+            }}>
+              {searching && suggestions.length === 0 && (
+                <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-3)' }}>Шукаємо…</div>
+              )}
+              {suggestions.map(s => (
+                <button
+                  key={s.place_id}
+                  onClick={() => selectSuggestion(s)}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    padding: '10px 14px', fontSize: 13, color: 'var(--text)',
+                  }}
+                >
+                  {s.display_name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>
-          Торкнись карти або перетягни мітку, щоб вибрати точку
+          Обери підказку вище або торкнись карти, щоб вибрати точку
         </div>
         <LocationPicker
           lat={form.lat}
           lng={form.lng}
+          isDark={isDark}
+          mapRef={pickerMapRef}
           onChange={(lat, lng) => setForm(f => ({ ...f, lat, lng }))}
         />
       </Section>
