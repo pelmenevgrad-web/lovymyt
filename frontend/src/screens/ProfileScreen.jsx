@@ -85,8 +85,9 @@ export default function ProfileScreen() {
     <div className="page">
       {/* Hero */}
       <div style={{
-        background: 'linear-gradient(135deg, var(--accent) 0%, #8B5CF6 100%)',
+        background: 'linear-gradient(135deg, var(--accent-dark) 0%, #7C3AED 100%)',
         padding: '20px 20px 18px',
+        borderRadius: '0 0 28px 28px',
         position: 'relative',
       }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
