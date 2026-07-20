@@ -197,7 +197,7 @@ app.post('/events', requireAuth, async (req, res) => {
   res.status(201).json({ event: shapeEvent(row) })
 })
 
-// Socket.io: комнаты мероприятий (realtime-чат)
+// Socket.io: кімнати заходів (realtime-чат)
 io.on('connection', (socket) => {
   socket.on('join_event', (eventId) => {
     socket.join(`event:${eventId}`)

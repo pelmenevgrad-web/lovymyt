@@ -180,7 +180,7 @@ export default function ProfileScreen() {
             <Sparkles size={18} /> Спробуй PRO
           </div>
           <div style={{ fontSize: 13, opacity: .9, marginBottom: 12 }}>
-            Бачиш, хто переглянув профіль, пріоритет на карті, необмежені мероприятия
+            Бачиш, хто переглянув профіль, пріоритет на карті, необмежені заходи
           </div>
           <button className="btn" style={{ background: 'rgba(255,255,255,.25)', color: '#fff', padding: '10px 20px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             Активувати за Stars <Star size={14} fill="currentColor" />
@@ -190,9 +190,9 @@ export default function ProfileScreen() {
 
       {/* My events */}
       <div style={{ padding: '20px 16px 0' }}>
-        <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 12 }}>Мої мероприятия</div>
+        <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 12 }}>Мої заходи</div>
         <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
-          Поки що немає — створи перше мероприятие через кнопку «Створити».
+          Поки що немає — створи перший захід через кнопку «Створити».
         </div>
       </div>
 

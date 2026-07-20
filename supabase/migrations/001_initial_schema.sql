@@ -203,15 +203,15 @@ CREATE TABLE reports (
 -- Индексы
 -- ────────────────────────────────────────────────────────────
 
--- Геопоиск по координатам мероприятий (обязателен)
+-- Геопошук по координатах заходів (обов'язковий)
 CREATE INDEX idx_events_location
   ON events USING GIST (location);
 
--- Фильтрация участников по статусу внутри мероприятия
+-- Фільтрація учасників за статусом всередині заходу
 CREATE INDEX idx_event_participants_event_status
   ON event_participants (event_id, status);
 
--- Фильтрация мероприятий по статусу и времени
+-- Фільтрація заходів за статусом і часом
 CREATE INDEX idx_events_status_start
   ON events (status, start_time);
 

@@ -128,14 +128,20 @@ export default function MapScreen() {
       .catch(err => console.error('[Map] failed to load events:', err.message))
   }, [])
 
+  // Fit the map to show every fetched event instead of always sitting on Kyiv center
+  useEffect(() => {
+    if (events.length > 0 && mapRef.current) {
+      const bounds = L.latLngBounds(events.map(e => [e.lat, e.lng]))
+      mapRef.current.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 })
+    }
+  }, [events])
+
   const filtered = selectedCat === 0
     ? events
     : events.filter(e => e.category_id === selectedCat)
 
   const activeCategories = CATEGORIES.filter(cat =>
-    cat.id === 0 || events.some(e =>
-      e.category_id === cat.id && ['active', 'gathering'].includes(e.status)
-    )
+    cat.id === 0 || events.some(e => e.category_id === cat.id)
   )
 
   function handleMarkerClick(event) {
@@ -199,7 +205,7 @@ export default function MapScreen() {
           boxShadow: 'var(--shadow-md)',
           whiteSpace: 'nowrap',
         }}>
-          {filtered.length} мероприятий поруч
+          {filtered.length} заходів поруч
         </div>
       )}
 
