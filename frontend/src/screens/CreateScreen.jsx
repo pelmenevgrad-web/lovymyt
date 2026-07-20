@@ -247,7 +247,7 @@ export default function CreateScreen() {
 
           {addressFocused && (searching || suggestions.length > 0) && (
             <div className="card" style={{
-              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1000,
               marginTop: 4, maxHeight: 220, overflowY: 'auto', padding: '4px 0',
             }}>
               {searching && suggestions.length === 0 && (
