@@ -45,7 +45,7 @@ function CenteredMessage({ icon: Icon, title, text }) {
 }
 
 export default function ProfileScreen() {
-  const { user, status } = useAuth()
+  const { user, status, error } = useAuth()
 
   if (status === 'pending') {
     return (
@@ -70,7 +70,7 @@ export default function ProfileScreen() {
       <CenteredMessage
         icon={AlertTriangle}
         title="Не вдалося завантажити профіль"
-        text="Спробуй закрити і знову відкрити застосунок."
+        text={error ? `Помилка: ${error}` : 'Спробуй закрити і знову відкрити застосунок.'}
       />
     )
   }
