@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  Clock, MapPin, Users, Wallet, PawPrint, Baby, BadgeCheck, Zap,
+  Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
   Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake,
 } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
@@ -82,6 +82,8 @@ export default function EventDetailScreen() {
   const budget = BUDGET_LABEL[event.budget_type] ?? BUDGET_LABEL.free
   const pct = Math.round((event.current_participants / event.max_participants) * 100)
   const alreadyJoined = event.my_status === 'accepted'
+  const eventStarted = new Date(event.start_time) < new Date()
+  const canReview = eventStarted && (event.is_creator || alreadyJoined)
 
   return (
     <div className="page">
@@ -188,6 +190,16 @@ export default function EventDetailScreen() {
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               {alreadyJoined ? <>Ви приєднались <Check size={18} /></> : joining ? 'Приєднуємось…' : <>Приєднатися <Check size={18} /></>}
             </span>
+          </button>
+        )}
+
+        {canReview && (
+          <button
+            className="btn btn-ghost"
+            style={{ width: '100%', marginTop: 8 }}
+            onClick={() => navigate(`/events/${id}/review`)}
+          >
+            Оцінити учасників
           </button>
         )}
       </div>

@@ -267,6 +267,73 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
   res.json({ participant: data })
 })
 
+// People who can be rated after the event: the creator plus everyone accepted
+app.get('/events/:id/participants', async (req, res) => {
+  const { data: event, error: eventErr } = await supabase
+    .from('events')
+    .select('creator_id, creator:users(id, first_name, avatar_url)')
+    .eq('id', req.params.id)
+    .single()
+
+  if (eventErr) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+
+  const { data: accepted, error: participantsErr } = await supabase
+    .from('event_participants')
+    .select('user:users(id, first_name, avatar_url)')
+    .eq('event_id', req.params.id)
+    .eq('status', 'accepted')
+
+  if (participantsErr) {
+    console.error('Fetching participants failed:', participantsErr.message)
+    return res.status(500).json({ error: 'Failed to load participants' })
+  }
+
+  const seen = new Set()
+  const people = [event.creator, ...accepted.map(p => p.user)].filter(person => {
+    if (!person || seen.has(person.id)) return false
+    seen.add(person.id)
+    return true
+  })
+
+  res.json({ participants: people, creator_id: event.creator_id })
+})
+
+// Submit ratings/comments for other people who were at the same event.
+// Upserts so re-submitting just edits the earlier review instead of erroring.
+app.post('/events/:id/reviews', requireAuth, async (req, res) => {
+  const { reviews } = req.body ?? {}
+  if (!Array.isArray(reviews) || reviews.length === 0) {
+    return res.status(400).json({ error: 'reviews must be a non-empty array' })
+  }
+
+  const rows = reviews
+    .filter(r => r.to_user_id && r.to_user_id !== req.auth.sub && Number(r.rating) >= 1 && Number(r.rating) <= 5)
+    .map(r => ({
+      event_id: req.params.id,
+      from_user_id: req.auth.sub,
+      to_user_id: r.to_user_id,
+      rating: Number(r.rating),
+      comment: r.comment?.trim() || null,
+    }))
+
+  if (rows.length === 0) {
+    return res.status(400).json({ error: 'No valid reviews to submit' })
+  }
+
+  const { error } = await supabase
+    .from('reviews')
+    .upsert(rows, { onConflict: 'event_id,from_user_id,to_user_id' })
+
+  if (error) {
+    console.error('Submitting reviews failed:', error.message)
+    return res.status(500).json({ error: 'Failed to submit reviews' })
+  }
+
+  res.status(201).json({ ok: true })
+})
+
 // Socket.io: кімнати заходів (realtime-чат)
 io.on('connection', (socket) => {
   socket.on('join_event', (eventId) => {

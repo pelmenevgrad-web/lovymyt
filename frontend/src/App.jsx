@@ -10,6 +10,7 @@ import ProfileScreen from './screens/ProfileScreen.jsx'
 import EditProfileScreen from './screens/EditProfileScreen.jsx'
 import CreateScreen from './screens/CreateScreen.jsx'
 import EventDetailScreen from './screens/EventDetailScreen.jsx'
+import EventReviewScreen from './screens/EventReviewScreen.jsx'
 import WelcomeScreen from './screens/WelcomeScreen.jsx'
 
 // ── Visible init-debug overlay ───────────────────────────────────────────────
@@ -159,6 +160,7 @@ export default function App() {
         <Route path="/profile/edit" element={<EditProfileScreen />} />
         <Route path="/create"     element={<CreateScreen />} />
         <Route path="/events/:id" element={<EventDetailScreen />} />
+        <Route path="/events/:id/review" element={<EventReviewScreen />} />
       </Routes>
     </MemoryRouter>
   )
