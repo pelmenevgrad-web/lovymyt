@@ -151,10 +151,12 @@ export default function App() {
     return <WelcomeScreen onJoin={handleJoin} />
   }
 
-  // Invite links open as https://t.me/lovymyt_bot?startapp=event_<uuid> — land
-  // straight on that event instead of the map.
+  // Invite/notification links open as https://t.me/lovymyt_bot?startapp=event_<uuid>
+  // or chat_<uuid> — land straight on that event or its chat instead of the map.
   const startParam = WebApp.initDataUnsafe?.start_param
-  const initialPath = startParam?.startsWith('event_') ? `/events/${startParam.slice('event_'.length)}` : '/'
+  const initialPath = startParam?.startsWith('chat_') ? `/events/${startParam.slice('chat_'.length)}/chat`
+    : startParam?.startsWith('event_') ? `/events/${startParam.slice('event_'.length)}`
+    : '/'
 
   return (
     <MemoryRouter initialEntries={[initialPath]}>

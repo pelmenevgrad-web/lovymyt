@@ -31,9 +31,57 @@ export const supabase = createClient(
 
 // Telegraf bot
 const bot = new Telegraf(BOT_TOKEN)
+const BOT_USERNAME = 'lovymyt_bot'
 
 bot.start((ctx) => ctx.reply('Ласкаво просимо в ЛовіМіть! Відкрий для себе новий світ емоцій.'))
 bot.help((ctx) => ctx.reply('Используй кнопку меню для запуска приложения.'))
+
+// DMs a user via the bot — works any time once they've opened the bot once
+// (which auth already requires), not just while the Mini App is open.
+// `startParam` becomes WebApp.initDataUnsafe.start_param on open (see App.jsx),
+// e.g. "event_<uuid>" lands on the event page, "chat_<uuid>" opens its chat.
+async function notifyUser(telegramId, text, startParam, buttonLabel = 'Відкрити захід') {
+  if (!telegramId) return
+  try {
+    await bot.telegram.sendMessage(telegramId, text, {
+      reply_markup: startParam
+        ? { inline_keyboard: [[{ text: buttonLabel, url: `https://t.me/${BOT_USERNAME}?startapp=${startParam}` }]] }
+        : undefined,
+    })
+  } catch (err) {
+    console.error('Failed to notify user', telegramId, err.message)
+  }
+}
+
+// Notifies everyone involved in an event (organizer + accepted participants)
+// except the person who triggered it. textBuilder receives the event title.
+async function notifyEventPeople(eventId, excludeUserId, textBuilder, startParam = `event_${eventId}`, buttonLabel) {
+  const { data: event } = await supabase
+    .from('events')
+    .select('title, creator_id, creator:users(telegram_id)')
+    .eq('id', eventId)
+    .single()
+  if (!event) return
+
+  const { data: participants } = await supabase
+    .from('event_participants')
+    .select('user:users(id, telegram_id)')
+    .eq('event_id', eventId)
+    .eq('status', 'accepted')
+
+  const recipients = new Map()
+  if (event.creator_id !== excludeUserId && event.creator?.telegram_id) {
+    recipients.set(event.creator_id, event.creator.telegram_id)
+  }
+  for (const p of participants ?? []) {
+    if (p.user && p.user.id !== excludeUserId && p.user.telegram_id) {
+      recipients.set(p.user.id, p.user.telegram_id)
+    }
+  }
+
+  const text = textBuilder(event.title)
+  await Promise.all([...recipients.values()].map(tgId => notifyUser(tgId, text, startParam, buttonLabel)))
+}
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok' }))
@@ -381,7 +429,7 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
 
   const { data: joiner, error: joinerErr } = await supabase
     .from('users')
-    .select('gender')
+    .select('gender, first_name')
     .eq('id', req.auth.sub)
     .single()
 
@@ -430,6 +478,10 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
     console.error('Join failed:', error.message)
     return res.status(500).json({ error: 'Failed to join event' })
   }
+
+  notifyEventPeople(req.params.id, req.auth.sub, (title) =>
+    `✅ ${joiner.first_name ?? 'Хтось'} приєднався до заходу «${title}»`,
+  ).catch(() => {})
 
   res.json({ participant: data })
 })
@@ -605,6 +657,14 @@ app.post('/events/:id/supplies/:supplyId/claim', requireAuth, async (req, res) =
     return res.status(500).json({ error: 'Failed to claim item' })
   }
 
+  const [{ data: supply }, { data: claimer }] = await Promise.all([
+    supabase.from('event_supplies').select('name, unit').eq('id', req.params.supplyId).single(),
+    supabase.from('users').select('first_name').eq('id', req.auth.sub).single(),
+  ])
+  notifyEventPeople(req.params.id, req.auth.sub, (title) =>
+    `🎒 ${claimer?.first_name ?? 'Хтось'} принесе ${amount}${supply?.unit ? ' ' + supply.unit : ''} (${supply?.name ?? 'щось'}) на «${title}»`,
+  ).catch(() => {})
+
   res.json({ claim: data })
 })
 
@@ -682,6 +742,14 @@ app.post('/events/:id/chat/messages', requireAuth, async (req, res) => {
 
     if (error) throw error
     io.to(`event:${req.params.id}`).emit('new_message', data)
+
+    const preview = data.text.length > 80 ? data.text.slice(0, 80) + '…' : data.text
+    notifyEventPeople(
+      req.params.id, req.auth.sub,
+      (title) => `💬 ${data.sender?.first_name ?? 'Хтось'} у чаті «${title}»: ${preview}`,
+      `chat_${req.params.id}`, 'Відкрити чат',
+    ).catch(() => {})
+
     res.status(201).json({ message: data })
   } catch (err) {
     console.error('Sending chat message failed:', err.message)
