@@ -6,7 +6,66 @@ import {
 } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
 import { Avatar, AvatarStack } from '../components/EventCard.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
+
+function SupplyItem({ supply, userId, onClaim }) {
+  const myClaim = supply.claims.find(c => c.user_id === userId)
+  const [editing, setEditing] = useState(false)
+  const [amount, setAmount] = useState(myClaim?.amount ?? '')
+  const [saving, setSaving] = useState(false)
+  const pct = Math.min(100, Math.round((supply.claimed_amount / supply.needed_amount) * 100))
+
+  async function save() {
+    setSaving(true)
+    await onClaim(supply.id, Number(amount) || 0)
+    setSaving(false)
+    setEditing(false)
+  }
+
+  return (
+    <div className="card" style={{ padding: 12, marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <span style={{ fontWeight: 700, fontSize: 14 }}>{supply.name}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-2)', flexShrink: 0 }}>
+          {supply.claimed_amount}/{supply.needed_amount}{supply.unit ? ` ${supply.unit}` : ''}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div style={{ flex: 1, height: 6, borderRadius: 99, background: 'var(--border)' }}>
+          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: pct >= 100 ? 'var(--green)' : 'var(--accent)' }} />
+        </div>
+        <AvatarStack people={supply.claims.map(c => ({ id: c.user_id, first_name: c.first_name, avatar_url: c.avatar_url }))} size={18} />
+      </div>
+
+      {editing ? (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="number" min={0} autoFocus
+            placeholder="Скільки принесеш?"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: 13 }} disabled={saving} onClick={save}>OK</button>
+        </div>
+      ) : (
+        <button
+          className="chip"
+          onClick={() => setEditing(true)}
+          style={{
+            background: myClaim ? 'var(--green-light)' : 'var(--card)',
+            color: myClaim ? 'var(--green)' : 'var(--text)',
+            border: '1.5px solid ' + (myClaim ? 'var(--green)' : 'var(--border)'),
+          }}
+        >
+          {myClaim ? `Я принесу: ${myClaim.amount}${supply.unit ? ` ${supply.unit}` : ''}` : 'Я принесу…'}
+        </button>
+      )}
+    </div>
+  )
+}
 
 const BUDGET_LABEL = {
   free: { label: 'Безкоштовно', Icon: Gift },
@@ -32,16 +91,34 @@ function ConditionRow({ Icon, children }) {
 export default function EventDetailScreen() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [event, setEvent] = useState(null)
   const [status, setStatus] = useState('pending') // pending | ok | error
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState(null)
+  const [supplies, setSupplies] = useState([])
 
   useEffect(() => {
     apiFetch(`/events/${id}`)
       .then(({ event }) => { setEvent(event); setStatus('ok') })
       .catch(() => setStatus('error'))
+    apiFetch(`/events/${id}/supplies`)
+      .then(({ supplies }) => setSupplies(supplies))
+      .catch(err => console.error('[EventDetail] failed to load supplies:', err.message))
   }, [id])
+
+  async function handleClaim(supplyId, amount) {
+    try {
+      await apiFetch(`/events/${id}/supplies/${supplyId}/claim`, {
+        method: 'POST',
+        body: JSON.stringify({ amount }),
+      })
+      const { supplies: fresh } = await apiFetch(`/events/${id}/supplies`)
+      setSupplies(fresh)
+    } catch (err) {
+      console.error('[EventDetail] claim failed:', err.message)
+    }
+  }
 
   async function handleJoin() {
     if (joining) return
@@ -173,6 +250,19 @@ export default function EventDetailScreen() {
               <p style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.5 }}>{event.description}</p>
             </div>
           </div>
+        )}
+
+        {supplies.length > 0 && (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: .06, marginBottom: 8 }}>
+              Що потрібно принести
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              {supplies.map(s => (
+                <SupplyItem key={s.id} supply={s} userId={user?.id} onClaim={handleClaim} />
+              ))}
+            </div>
+          </>
         )}
       </div>
 

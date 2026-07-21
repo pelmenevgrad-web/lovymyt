@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import WebApp from '@twa-dev/sdk'
-import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Zap, Search } from 'lucide-react'
+import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Zap, Search, Plus, X } from 'lucide-react'
 import { CATEGORIES } from '../data/mockData.js'
 import { apiFetch } from '../lib/api.js'
 
@@ -95,6 +95,7 @@ export default function CreateScreen() {
     lng: INITIAL_LNG,
     late_join_allowed: false,
     conditions: { with_pets: false, with_kids: false, verified_only: false },
+    supplies: [],
   })
 
   const [submitting, setSubmitting] = useState(false)
@@ -160,6 +161,16 @@ export default function CreateScreen() {
     ...f, conditions: { ...f.conditions, [key]: !f.conditions[key] }
   }))
 
+  const addSupply = () => setForm(f => ({
+    ...f, supplies: [...f.supplies, { name: '', needed_amount: '', unit: '' }],
+  }))
+  const updateSupply = (i, key, value) => setForm(f => ({
+    ...f, supplies: f.supplies.map((s, idx) => idx === i ? { ...s, [key]: value } : s),
+  }))
+  const removeSupply = (i) => setForm(f => ({
+    ...f, supplies: f.supplies.filter((_, idx) => idx !== i),
+  }))
+
   const canSubmit = form.category_id !== null && form.title.trim() && form.address_text.trim() && form.start_time
 
   async function handleCreate() {
@@ -167,7 +178,7 @@ export default function CreateScreen() {
     setSubmitting(true)
     setSubmitError(null)
     try {
-      await apiFetch('/events', {
+      const { event } = await apiFetch('/events', {
         method: 'POST',
         body: JSON.stringify({
           category_id: form.category_id,
@@ -187,6 +198,13 @@ export default function CreateScreen() {
           conditions: form.conditions,
         }),
       })
+
+      const validSupplies = form.supplies.filter(s => s.name.trim() && Number(s.needed_amount) > 0)
+      await Promise.all(validSupplies.map(s => apiFetch(`/events/${event.id}/supplies`, {
+        method: 'POST',
+        body: JSON.stringify({ name: s.name.trim(), needed_amount: Number(s.needed_amount), unit: s.unit.trim() || null }),
+      }).catch(err => console.error('[Create] failed to add supply:', s.name, err.message))))
+
       navigate('/')
     } catch (err) {
       setSubmitError(err.message)
@@ -439,6 +457,53 @@ export default function CreateScreen() {
             )
           })}
         </div>
+      </Section>
+
+      {/* Supplies */}
+      <Section title="Що потрібно для заходу (необов'язково)">
+        {form.supplies.map((s, i) => (
+          <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+            <input
+              type="text"
+              placeholder="Назва (вугілля)"
+              value={s.name}
+              onChange={e => updateSupply(i, 'name', e.target.value)}
+              style={{ flex: 2 }}
+            />
+            <input
+              type="number"
+              min={0}
+              placeholder="К-сть"
+              value={s.needed_amount}
+              onChange={e => updateSupply(i, 'needed_amount', e.target.value)}
+              style={{ flex: 1, textAlign: 'center' }}
+            />
+            <input
+              type="text"
+              placeholder="Од. (мішки)"
+              value={s.unit}
+              onChange={e => updateSupply(i, 'unit', e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button
+              onClick={() => removeSupply(i)}
+              style={{
+                background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 8,
+                width: 32, height: 32, flexShrink: 0, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ))}
+        <button
+          className="chip"
+          onClick={addSupply}
+          style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: 'none' }}
+        >
+          <Plus size={15} /> Додати поле
+        </button>
       </Section>
 
       {/* Submit */}

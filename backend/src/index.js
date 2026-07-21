@@ -356,6 +356,113 @@ app.post('/events/:id/reviews', requireAuth, async (req, res) => {
   res.status(201).json({ ok: true })
 })
 
+const SUPPLY_SELECT = '*, claims:event_supply_claims(amount, user:users(id, first_name, avatar_url))'
+
+function shapeSupply(row) {
+  const claims = (row.claims ?? []).filter(c => c.user)
+  const claimed_amount = claims.reduce((sum, c) => sum + Number(c.amount), 0)
+  return {
+    id: row.id,
+    name: row.name,
+    needed_amount: Number(row.needed_amount),
+    unit: row.unit,
+    claimed_amount,
+    claims: claims.map(c => ({
+      user_id: c.user.id, first_name: c.user.first_name, avatar_url: c.user.avatar_url, amount: Number(c.amount),
+    })),
+  }
+}
+
+// What's needed for the event (уголь, дрова, вода...) — public read
+app.get('/events/:id/supplies', async (req, res) => {
+  const { data, error } = await supabase
+    .from('event_supplies')
+    .select(SUPPLY_SELECT)
+    .eq('event_id', req.params.id)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('Fetching supplies failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load supplies' })
+  }
+
+  res.json({ supplies: data.map(shapeSupply) })
+})
+
+// Only the organizer can define what's needed
+app.post('/events/:id/supplies', requireAuth, async (req, res) => {
+  const { data: event, error: eventErr } = await supabase
+    .from('events')
+    .select('creator_id')
+    .eq('id', req.params.id)
+    .single()
+
+  if (eventErr) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  if (event.creator_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки організатор може додавати список необхідного' })
+  }
+
+  const { name, needed_amount, unit } = req.body ?? {}
+  if (!name?.trim() || !(Number(needed_amount) > 0)) {
+    return res.status(400).json({ error: 'Потрібні назва і кількість більше нуля' })
+  }
+
+  const { data: row, error } = await supabase
+    .from('event_supplies')
+    .insert({
+      event_id: req.params.id,
+      name: name.trim(),
+      needed_amount: Number(needed_amount),
+      unit: unit?.trim() || null,
+    })
+    .select(SUPPLY_SELECT)
+    .single()
+
+  if (error) {
+    console.error('Adding supply failed:', error.message)
+    return res.status(500).json({ error: 'Failed to add item' })
+  }
+
+  res.status(201).json({ supply: shapeSupply(row) })
+})
+
+// Claim how much of an item you'll bring — amount <= 0 removes your claim
+app.post('/events/:id/supplies/:supplyId/claim', requireAuth, async (req, res) => {
+  const amount = Number(req.body?.amount)
+
+  if (!amount || amount <= 0) {
+    const { error } = await supabase
+      .from('event_supply_claims')
+      .delete()
+      .eq('supply_id', req.params.supplyId)
+      .eq('user_id', req.auth.sub)
+
+    if (error) {
+      console.error('Removing claim failed:', error.message)
+      return res.status(500).json({ error: 'Failed to update claim' })
+    }
+    return res.json({ removed: true })
+  }
+
+  const { data, error } = await supabase
+    .from('event_supply_claims')
+    .upsert(
+      { supply_id: req.params.supplyId, user_id: req.auth.sub, amount },
+      { onConflict: 'supply_id,user_id' },
+    )
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Claiming supply failed:', error.message)
+    return res.status(500).json({ error: 'Failed to claim item' })
+  }
+
+  res.json({ claim: data })
+})
+
 // Socket.io: кімнати заходів (realtime-чат)
 io.on('connection', (socket) => {
   socket.on('join_event', (eventId) => {
