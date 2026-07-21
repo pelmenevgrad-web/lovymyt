@@ -140,12 +140,28 @@ export default function CreateScreen() {
   // "Київська обл., Києво-Святошинський р-н, м. Київ, вул. Хрещатик, 15, 01001"
   // → "Київ, вул. Хрещатик 15" — just locality + street + house number
   function formatShortAddress(result) {
-    const a = result.address ?? {}
+    const a = result?.address ?? {}
     const locality = a.city ?? a.town ?? a.village ?? a.municipality ?? a.county ?? ''
     const street = a.road ?? a.pedestrian ?? a.footway ?? ''
     const streetPart = [street, a.house_number].filter(Boolean).join(' ')
     const parts = [locality, streetPart].filter(Boolean)
-    return parts.length > 0 ? parts.join(', ') : result.display_name
+    if (parts.length > 0) return parts.join(', ')
+    return result?.display_name || null
+  }
+
+  // Reverse-geocodes wherever the user taps/drags the pin so the address field is
+  // never empty (which used to leave "Створити" disabled) — falls back to raw
+  // coordinates if the point is somewhere Nominatim has no data for at all (forest, etc).
+  async function handleMapPointChange(lat, lng) {
+    setForm(f => ({ ...f, lat, lng }))
+    const fallback = `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&zoom=16&lat=${lat}&lon=${lng}`)
+      const result = await res.json()
+      setForm(f => ({ ...f, address_text: formatShortAddress(result) ?? fallback }))
+    } catch {
+      setForm(f => ({ ...f, address_text: fallback }))
+    }
   }
 
   function selectSuggestion(result) {
@@ -323,7 +339,7 @@ export default function CreateScreen() {
           lng={form.lng}
           isDark={isDark}
           mapRef={pickerMapRef}
-          onChange={(lat, lng) => setForm(f => ({ ...f, lat, lng }))}
+          onChange={handleMapPointChange}
         />
       </Section>
 
