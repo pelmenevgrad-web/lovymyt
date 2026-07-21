@@ -608,14 +608,103 @@ app.post('/events/:id/supplies/:supplyId/claim', requireAuth, async (req, res) =
   res.json({ claim: data })
 })
 
-// Socket.io: кімнати заходів (realtime-чат)
-io.on('connection', (socket) => {
-  socket.on('join_event', (eventId) => {
-    socket.join(`event:${eventId}`)
-  })
+// Only the organizer or an accepted participant can read/write an event's chat
+async function canAccessChat(eventId, userId) {
+  const { data: event } = await supabase.from('events').select('creator_id').eq('id', eventId).single()
+  if (!event) return false
+  if (event.creator_id === userId) return true
 
-  socket.on('send_message', ({ eventId, message }) => {
-    io.to(`event:${eventId}`).emit('new_message', message)
+  const { data: participant } = await supabase
+    .from('event_participants')
+    .select('status')
+    .eq('event_id', eventId)
+    .eq('user_id', userId)
+    .eq('status', 'accepted')
+    .maybeSingle()
+  return !!participant
+}
+
+async function getOrCreateChat(eventId) {
+  const { data: existing } = await supabase.from('event_chats').select('id').eq('event_id', eventId).maybeSingle()
+  if (existing) return existing.id
+
+  const { data: created, error } = await supabase.from('event_chats').insert({ event_id: eventId }).select('id').single()
+  if (error) throw error
+  await supabase.from('events').update({ chat_id: created.id }).eq('id', eventId)
+  return created.id
+}
+
+const CHAT_MESSAGE_SELECT = 'id, text, is_system, created_at, sender:users(id, first_name, avatar_url)'
+
+// Message history for an event's chat
+app.get('/events/:id/chat/messages', requireAuth, async (req, res) => {
+  const allowed = await canAccessChat(req.params.id, req.auth.sub)
+  if (!allowed) {
+    return res.status(403).json({ error: 'Доступно тільки учасникам заходу' })
+  }
+
+  try {
+    const chatId = await getOrCreateChat(req.params.id)
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select(CHAT_MESSAGE_SELECT)
+      .eq('chat_id', chatId)
+      .order('created_at', { ascending: true })
+      .limit(200)
+
+    if (error) throw error
+    res.json({ chat_id: chatId, messages: data })
+  } catch (err) {
+    console.error('Fetching chat messages failed:', err.message)
+    res.status(500).json({ error: 'Failed to load chat' })
+  }
+})
+
+// Send a chat message — persisted, then broadcast to anyone subscribed via socket
+app.post('/events/:id/chat/messages', requireAuth, async (req, res) => {
+  const allowed = await canAccessChat(req.params.id, req.auth.sub)
+  if (!allowed) {
+    return res.status(403).json({ error: 'Доступно тільки учасникам заходу' })
+  }
+
+  const text = req.body?.text?.trim()
+  if (!text) {
+    return res.status(400).json({ error: 'Порожнє повідомлення' })
+  }
+
+  try {
+    const chatId = await getOrCreateChat(req.params.id)
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .insert({ chat_id: chatId, sender_id: req.auth.sub, text })
+      .select(CHAT_MESSAGE_SELECT)
+      .single()
+
+    if (error) throw error
+    io.to(`event:${req.params.id}`).emit('new_message', data)
+    res.status(201).json({ message: data })
+  } catch (err) {
+    console.error('Sending chat message failed:', err.message)
+    res.status(500).json({ error: 'Failed to send message' })
+  }
+})
+
+// Socket.io: realtime delivery only — sending goes through the REST endpoint
+// above (which persists then broadcasts); sockets just subscribe to a room.
+io.use((socket, next) => {
+  try {
+    socket.userId = jwt.verify(socket.handshake.auth?.token, JWT_SECRET).sub
+    next()
+  } catch {
+    next(new Error('unauthorized'))
+  }
+})
+
+io.on('connection', (socket) => {
+  socket.on('join_event', async (eventId) => {
+    if (await canAccessChat(eventId, socket.userId)) {
+      socket.join(`event:${eventId}`)
+    }
   })
 
   socket.on('leave_event', (eventId) => {

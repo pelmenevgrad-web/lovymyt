@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
-  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil,
+  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle,
 } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
 import { Avatar, AvatarStack } from '../components/EventCard.jsx'
@@ -323,6 +323,16 @@ export default function EventDetailScreen() {
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               {alreadyJoined ? <>Ви приєднались <Check size={18} /></> : joining ? 'Приєднуємось…' : <>Приєднатися <Check size={18} /></>}
             </span>
+          </button>
+        )}
+
+        {(event.is_creator || alreadyJoined) && (
+          <button
+            className="btn btn-ghost"
+            style={{ width: '100%', marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            onClick={() => navigate(`/events/${id}/chat`)}
+          >
+            <MessageCircle size={16} /> Чат заходу
           </button>
         )}
 
