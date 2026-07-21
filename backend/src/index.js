@@ -108,7 +108,7 @@ function tryAuth(req) {
 
 // Update the authenticated user's own editable profile fields
 app.patch('/users/me', requireAuth, async (req, res) => {
-  const { bio } = req.body ?? {}
+  const { bio, gender } = req.body ?? {}
   const patch = {}
 
   if (bio !== undefined) {
@@ -116,6 +116,13 @@ app.patch('/users/me', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'bio must be a string up to 300 characters' })
     }
     patch.bio = bio.trim() || null
+  }
+
+  if (gender !== undefined) {
+    if (gender !== null && gender !== 'male' && gender !== 'female') {
+      return res.status(400).json({ error: 'gender must be "male", "female" or null' })
+    }
+    patch.gender = gender
   }
 
   if (Object.keys(patch).length === 0) {
@@ -164,6 +171,9 @@ function shapeEvent(row) {
     budget_amount: row.budget_amount,
     age_min: row.age_min,
     age_max: row.age_max,
+    allowed_gender: row.allowed_gender ?? 'any',
+    max_male: row.max_male,
+    max_female: row.max_female,
     late_join_allowed: late_join_allowed ?? false,
     conditions,
   }
@@ -191,10 +201,14 @@ app.post('/events', requireAuth, async (req, res) => {
     category_id, title, description, address_text, start_time, lat, lng,
     max_participants, min_participants, budget_type, budget_amount,
     age_min, age_max, late_join_allowed, conditions,
+    allowed_gender, max_male, max_female,
   } = req.body ?? {}
 
   if (!category_id || !title?.trim() || !address_text?.trim() || !start_time || lat == null || lng == null) {
     return res.status(400).json({ error: 'Missing required fields' })
+  }
+  if (allowed_gender && !['any', 'male', 'female'].includes(allowed_gender)) {
+    return res.status(400).json({ error: 'allowed_gender must be "any", "male" or "female"' })
   }
 
   const { data: row, error } = await supabase
@@ -207,6 +221,8 @@ app.post('/events', requireAuth, async (req, res) => {
       max_participants, min_participants, budget_type,
       budget_amount: budget_amount || null,
       age_min: age_min || null, age_max: age_max || null,
+      allowed_gender: allowed_gender || 'any',
+      max_male: max_male || null, max_female: max_female || null,
       conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
     })
     .select(EVENT_SELECT)
@@ -257,11 +273,13 @@ app.get('/events/:id', async (req, res) => {
   })
 })
 
+const GENDER_LABEL = { male: 'чоловіків', female: 'жінок' }
+
 // Join an event — instant acceptance for now (no organizer approval step yet)
 app.post('/events/:id/join', requireAuth, async (req, res) => {
   const { data: event, error: eventErr } = await supabase
     .from('events')
-    .select('creator_id')
+    .select('creator_id, allowed_gender, max_male, max_female')
     .eq('id', req.params.id)
     .single()
 
@@ -270,6 +288,44 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
   }
   if (event.creator_id === req.auth.sub) {
     return res.status(400).json({ error: 'Не можна приєднатися до власного заходу' })
+  }
+
+  const { data: joiner, error: joinerErr } = await supabase
+    .from('users')
+    .select('gender')
+    .eq('id', req.auth.sub)
+    .single()
+
+  if (joinerErr) {
+    console.error('Fetching joiner failed:', joinerErr.message)
+    return res.status(500).json({ error: 'Failed to verify user' })
+  }
+
+  if (event.allowed_gender && event.allowed_gender !== 'any') {
+    if (!joiner.gender) {
+      return res.status(403).json({ error: `Цей захід тільки для ${GENDER_LABEL[event.allowed_gender]}. Вкажи свою стать у профілі, щоб приєднатися.` })
+    }
+    if (joiner.gender !== event.allowed_gender) {
+      return res.status(403).json({ error: `Цей захід тільки для ${GENDER_LABEL[event.allowed_gender]}` })
+    }
+  }
+
+  const quota = joiner.gender === 'male' ? event.max_male : joiner.gender === 'female' ? event.max_female : null
+  if (quota) {
+    const { data: sameGender, error: countErr } = await supabase
+      .from('event_participants')
+      .select('user:users!inner(gender)')
+      .eq('event_id', req.params.id)
+      .eq('status', 'accepted')
+      .eq('users.gender', joiner.gender)
+
+    if (countErr) {
+      console.error('Counting participants by gender failed:', countErr.message)
+      return res.status(500).json({ error: 'Failed to verify quota' })
+    }
+    if (sameGender.length >= quota) {
+      return res.status(403).json({ error: `Ліміт для ${GENDER_LABEL[joiner.gender]} вже заповнений` })
+    }
   }
 
   const { data, error } = await supabase

@@ -66,6 +66,12 @@ const CONDITIONS = [
   { key: 'verified_only',  Icon: BadgeCheck, label: 'Тільки верифіковані' },
 ]
 
+const GENDER_OPTIONS = [
+  { value: 'any',    label: 'Всі' },
+  { value: 'male',   label: 'Чоловіки' },
+  { value: 'female', label: 'Жінки' },
+]
+
 function Section({ title, children }) {
   return (
     <div style={{ margin: '0 16px 16px' }}>
@@ -91,6 +97,9 @@ export default function CreateScreen() {
     budget_amount: '',
     age_min: '',
     age_max: '',
+    allowed_gender: 'any',
+    max_male: '',
+    max_female: '',
     lat: INITIAL_LAT,
     lng: INITIAL_LNG,
     late_join_allowed: false,
@@ -210,6 +219,9 @@ export default function CreateScreen() {
           budget_amount: form.budget_amount ? Number(form.budget_amount) : null,
           age_min: form.age_min ? Number(form.age_min) : null,
           age_max: form.age_max ? Number(form.age_max) : null,
+          allowed_gender: form.allowed_gender,
+          max_male: form.max_male ? Number(form.max_male) : null,
+          max_female: form.max_female ? Number(form.max_female) : null,
           late_join_allowed: form.late_join_allowed,
           conditions: form.conditions,
         }),
@@ -446,6 +458,45 @@ export default function CreateScreen() {
           <span style={{ color: 'var(--text-3)', flexShrink: 0 }}>–</span>
           <input type="number" placeholder="до" min={14} max={99}
             value={form.age_max} onChange={e => set('age_max', e.target.value)}
+            style={{ textAlign: 'center' }}
+          />
+        </div>
+      </Section>
+
+      {/* Gender */}
+      <Section title="Кого можна запрошувати">
+        <div style={{ display: 'flex', gap: 8 }}>
+          {GENDER_OPTIONS.map(opt => {
+            const active = form.allowed_gender === opt.value
+            return (
+              <button
+                key={opt.value}
+                onClick={() => set('allowed_gender', opt.value)}
+                className="chip"
+                style={{
+                  flex: 1, justifyContent: 'center',
+                  background: active ? 'var(--accent)' : 'var(--card)',
+                  color: active ? '#fff' : 'var(--text)',
+                  border: active ? 'none' : '1.5px solid var(--border)',
+                }}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 6px' }}>
+          Квоти (необов'язково) — скільки максимум кожної статі
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <input
+            type="number" min={0} placeholder="Макс. жінок"
+            value={form.max_female} onChange={e => set('max_female', e.target.value)}
+            style={{ textAlign: 'center' }}
+          />
+          <input
+            type="number" min={0} placeholder="Макс. чоловіків"
+            value={form.max_male} onChange={e => set('max_male', e.target.value)}
             style={{ textAlign: 'center' }}
           />
         </div>

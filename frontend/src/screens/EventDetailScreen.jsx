@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
-  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus,
+  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars,
 } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
 import { Avatar, AvatarStack } from '../components/EventCard.jsx'
@@ -235,6 +235,16 @@ export default function EventDetailScreen() {
           {(event.age_min || event.age_max) && (
             <ConditionRow Icon={Users}>
               Вік: {event.age_min ?? '0'}–{event.age_max ?? '∞'}
+            </ConditionRow>
+          )}
+          {event.allowed_gender && event.allowed_gender !== 'any' && (
+            <ConditionRow Icon={event.allowed_gender === 'male' ? Mars : Venus}>
+              Тільки {event.allowed_gender === 'male' ? 'чоловіки' : 'жінки'}
+            </ConditionRow>
+          )}
+          {(event.max_male || event.max_female) && (
+            <ConditionRow Icon={Users}>
+              Квоти:{event.max_female ? ` до ${event.max_female} жінок` : ''}{event.max_male ? `${event.max_female ? ',' : ''} до ${event.max_male} чоловіків` : ''}
             </ConditionRow>
           )}
         </div>
