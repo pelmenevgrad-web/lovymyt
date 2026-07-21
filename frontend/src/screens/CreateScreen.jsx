@@ -52,6 +52,8 @@ export default function CreateScreen() {
     description: '',
     address_text: '',
     start_time: '',
+    duration_min_hours: 4,
+    duration_max_hours: 10,
     max_participants: 6,
     min_participants: 2,
     budget_type: 'free',
@@ -97,6 +99,10 @@ export default function CreateScreen() {
           description: event.description ?? '',
           address_text: event.address_text,
           start_time: event.start_time.slice(0, 16),
+          duration_min_hours: event.duration_min_hours ?? 4,
+          duration_max_hours: event.end_time
+            ? Math.round((new Date(event.end_time) - new Date(event.start_time)) / 3_600_000)
+            : 10,
           max_participants: event.max_participants,
           min_participants: event.min_participants,
           budget_type: event.budget_type,
@@ -149,6 +155,8 @@ export default function CreateScreen() {
           title: form.title,
           address_text: form.address_text,
           start_time: new Date(form.start_time).toISOString(),
+          duration_min_hours: form.duration_min_hours,
+          duration_max_hours: form.duration_max_hours,
           lat: form.lat,
           lng: form.lng,
           description: form.description.trim() || null,
@@ -286,6 +294,31 @@ export default function CreateScreen() {
         >
           <Zap size={15} /> Прямо зараз
         </button>
+      </Section>
+
+      {/* Duration */}
+      <Section title={`Тривалість: ${form.duration_min_hours}–${form.duration_max_hours} год`}>
+        <div className="card" style={{ padding: '14px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Орієнтовно (мінімум)</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button onClick={() => set('duration_min_hours', Math.max(1, form.duration_min_hours - 1))} style={counterBtn}>−</button>
+              <span style={{ fontWeight: 700, minWidth: 20, textAlign: 'center' }}>{form.duration_min_hours}</span>
+              <button onClick={() => set('duration_min_hours', Math.min(form.duration_max_hours, form.duration_min_hours + 1))} style={counterBtn}>+</button>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Максимум (авто-завершення)</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button onClick={() => set('duration_max_hours', Math.max(form.duration_min_hours, form.duration_max_hours - 1))} style={counterBtn}>−</button>
+              <span style={{ fontWeight: 700, minWidth: 20, textAlign: 'center' }}>{form.duration_max_hours}</span>
+              <button onClick={() => set('duration_max_hours', Math.min(48, form.duration_max_hours + 1))} style={counterBtn}>+</button>
+            </div>
+          </div>
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>
+          Захід автоматично завершиться через {form.duration_max_hours} год після початку, якщо ти не завершиш його раніше
+        </p>
       </Section>
 
       {/* Late join */}

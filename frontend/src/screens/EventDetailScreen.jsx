@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
-  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle,
+  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag,
 } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
 import { Avatar, AvatarStack } from '../components/EventCard.jsx'
@@ -100,6 +100,9 @@ export default function EventDetailScreen() {
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState(null)
   const [supplies, setSupplies] = useState([])
+  const [confirmingComplete, setConfirmingComplete] = useState(false)
+  const [completing, setCompleting] = useState(false)
+  const [completeError, setCompleteError] = useState(null)
   const [, forceTick] = useState(0)
 
   // Keeps the countdown to start ticking without needing a full data refetch
@@ -127,6 +130,20 @@ export default function EventDetailScreen() {
       setSupplies(fresh)
     } catch (err) {
       console.error('[EventDetail] claim failed:', err.message)
+    }
+  }
+
+  async function handleComplete() {
+    setCompleting(true)
+    setCompleteError(null)
+    try {
+      const { event: updated } = await apiFetch(`/events/${id}/complete`, { method: 'POST' })
+      setEvent(updated)
+      setConfirmingComplete(false)
+    } catch (err) {
+      setCompleteError(err.message)
+    } finally {
+      setCompleting(false)
     }
   }
 
@@ -170,6 +187,7 @@ export default function EventDetailScreen() {
   const pct = Math.round((event.current_participants / event.max_participants) * 100)
   const alreadyJoined = event.my_status === 'accepted'
   const eventStarted = new Date(event.start_time) < new Date()
+  const isEnded = event.status === 'completed' || event.status === 'cancelled'
   const canReview = eventStarted && (event.is_creator || alreadyJoined)
 
   function handleInvite() {
@@ -248,6 +266,12 @@ export default function EventDetailScreen() {
         {/* Key facts */}
         <div className="card" style={{ padding: '4px 14px', marginBottom: 16 }}>
           <ConditionRow Icon={Clock}>{formatDateTime(event.start_time)}</ConditionRow>
+          {event.end_time && (
+            <ConditionRow Icon={Clock}>
+              Тривалість: {event.duration_min_hours ? `${event.duration_min_hours}–` : 'до '}
+              {Math.round((new Date(event.end_time) - new Date(event.start_time)) / 3_600_000)} год
+            </ConditionRow>
+          )}
           <ConditionRow Icon={MapPin}>{event.address_text}</ConditionRow>
           <ConditionRow Icon={Users}>
             {event.current_participants}/{event.max_participants} учасників
@@ -323,13 +347,46 @@ export default function EventDetailScreen() {
         {joinError && (
           <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 8, textAlign: 'center' }}>{joinError}</div>
         )}
+        {isEnded && (
+          <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-3)', marginBottom: 8 }}>
+            {event.status === 'cancelled' ? 'Захід скасовано' : 'Захід завершено'}
+          </div>
+        )}
         {event.is_creator ? (
-          <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>Це ваш захід</div>
+          <>
+            {!isEnded && (
+              confirmingComplete ? (
+                <div>
+                  {completeError && (
+                    <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 8, textAlign: 'center' }}>{completeError}</div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      className="btn" style={{ flex: 1, background: 'var(--red)', color: '#fff', opacity: completing ? .6 : 1 }}
+                      disabled={completing} onClick={handleComplete}
+                    >
+                      {completing ? 'Завершуємо…' : 'Так, завершити'}
+                    </button>
+                    <button className="btn btn-ghost" style={{ flex: 1 }} disabled={completing} onClick={() => setConfirmingComplete(false)}>
+                      Скасувати
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  className="btn" style={{ width: '100%', background: 'var(--red-light)', color: 'var(--red)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                  onClick={() => setConfirmingComplete(true)}
+                >
+                  <Flag size={16} /> Завершити захід
+                </button>
+              )
+            )}
+          </>
         ) : (
           <button
             className="btn btn-primary"
-            style={{ width: '100%', opacity: joining ? .6 : 1 }}
-            disabled={joining || alreadyJoined}
+            style={{ width: '100%', opacity: joining || isEnded ? .6 : 1 }}
+            disabled={joining || alreadyJoined || isEnded}
             onClick={handleJoin}
           >
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>

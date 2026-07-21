@@ -245,6 +245,8 @@ function shapeEvent(row) {
     category_id: row.category_id,
     status: row.status,
     start_time: row.start_time,
+    end_time: row.end_time,
+    duration_min_hours: row.duration_min_hours,
     lat: row.lat,
     lng: row.lng,
     address_text: row.address_text,
@@ -283,6 +285,14 @@ app.get('/events', async (_req, res) => {
   res.json({ events: data.map(shapeEvent) })
 })
 
+// duration_max_hours becomes end_time (start_time + N hours) — the hard
+// cutoff where the background sweep (see setInterval below) auto-completes
+// the event if the organizer hasn't already. duration_min_hours is descriptive only.
+function computeEndTime(startTime, durationMaxHours) {
+  if (!durationMaxHours) return null
+  return new Date(new Date(startTime).getTime() + durationMaxHours * 3_600_000).toISOString()
+}
+
 // Create a new event owned by the authenticated user
 app.post('/events', requireAuth, async (req, res) => {
   const {
@@ -290,10 +300,14 @@ app.post('/events', requireAuth, async (req, res) => {
     max_participants, min_participants, budget_type, budget_amount,
     age_min, age_max, late_join_allowed, conditions,
     allowed_gender, max_male, max_female,
+    duration_min_hours, duration_max_hours,
   } = req.body ?? {}
 
   if (!category_id || !title?.trim() || !address_text?.trim() || !start_time || lat == null || lng == null) {
     return res.status(400).json({ error: 'Missing required fields' })
+  }
+  if (!duration_max_hours || duration_max_hours <= 0) {
+    return res.status(400).json({ error: 'Потрібна максимальна тривалість заходу' })
   }
   if (allowed_gender && !['any', 'male', 'female'].includes(allowed_gender)) {
     return res.status(400).json({ error: 'allowed_gender must be "any", "male" or "female"' })
@@ -306,6 +320,8 @@ app.post('/events', requireAuth, async (req, res) => {
       category_id, title: title.trim(), description: description?.trim() || null,
       address_text: address_text.trim(),
       start_time, lat, lng,
+      end_time: computeEndTime(start_time, duration_max_hours),
+      duration_min_hours: duration_min_hours || null,
       max_participants, min_participants, budget_type,
       budget_amount: budget_amount || null,
       age_min: age_min || null, age_max: age_max || null,
@@ -347,10 +363,14 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
     max_participants, min_participants, budget_type, budget_amount,
     age_min, age_max, late_join_allowed, conditions,
     allowed_gender, max_male, max_female,
+    duration_min_hours, duration_max_hours,
   } = req.body ?? {}
 
   if (!category_id || !title?.trim() || !address_text?.trim() || !start_time || lat == null || lng == null) {
     return res.status(400).json({ error: 'Missing required fields' })
+  }
+  if (!duration_max_hours || duration_max_hours <= 0) {
+    return res.status(400).json({ error: 'Потрібна максимальна тривалість заходу' })
   }
   if (allowed_gender && !['any', 'male', 'female'].includes(allowed_gender)) {
     return res.status(400).json({ error: 'allowed_gender must be "any", "male" or "female"' })
@@ -362,6 +382,8 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
       category_id, title: title.trim(), description: description?.trim() || null,
       address_text: address_text.trim(),
       start_time, lat, lng,
+      end_time: computeEndTime(start_time, duration_max_hours),
+      duration_min_hours: duration_min_hours || null,
       max_participants, min_participants, budget_type,
       budget_amount: budget_amount || null,
       age_min: age_min || null, age_max: age_max || null,
@@ -376,6 +398,36 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
   if (error) {
     console.error('Updating event failed:', error.message)
     return res.status(500).json({ error: 'Failed to update event' })
+  }
+
+  res.json({ event: shapeEvent(row) })
+})
+
+// Manually end an event — organizer only
+app.post('/events/:id/complete', requireAuth, async (req, res) => {
+  const { data: existing, error: fetchErr } = await supabase
+    .from('events')
+    .select('creator_id')
+    .eq('id', req.params.id)
+    .single()
+
+  if (fetchErr) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  if (existing.creator_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки організатор може завершити захід' })
+  }
+
+  const { data: row, error } = await supabase
+    .from('events')
+    .update({ status: 'completed' })
+    .eq('id', req.params.id)
+    .select(EVENT_SELECT)
+    .single()
+
+  if (error) {
+    console.error('Completing event failed:', error.message)
+    return res.status(500).json({ error: 'Failed to complete event' })
   }
 
   res.json({ event: shapeEvent(row) })
@@ -459,7 +511,7 @@ const GENDER_LABEL = { male: 'чоловіків', female: 'жінок' }
 app.post('/events/:id/join', requireAuth, async (req, res) => {
   const { data: event, error: eventErr } = await supabase
     .from('events')
-    .select('creator_id, allowed_gender, max_male, max_female')
+    .select('creator_id, allowed_gender, max_male, max_female, status')
     .eq('id', req.params.id)
     .single()
 
@@ -468,6 +520,9 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
   }
   if (event.creator_id === req.auth.sub) {
     return res.status(400).json({ error: 'Не можна приєднатися до власного заходу' })
+  }
+  if (event.status === 'completed' || event.status === 'cancelled') {
+    return res.status(400).json({ error: 'Цей захід вже завершено' })
   }
 
   const { data: joiner, error: joinerErr } = await supabase
@@ -847,9 +902,25 @@ io.on('connection', (socket) => {
   })
 })
 
+// Auto-completes events past their end_time if the organizer hasn't already —
+// runs in-process since there's no separate cron/worker for this app.
+async function sweepExpiredEvents() {
+  const { error } = await supabase
+    .from('events')
+    .update({ status: 'completed' })
+    .in('status', ['planned', 'gathering', 'active'])
+    .not('end_time', 'is', null)
+    .lt('end_time', new Date().toISOString())
+
+  if (error) console.error('Auto-complete sweep failed:', error.message)
+}
+
 async function start() {
   await new Promise((resolve) => httpServer.listen(PORT, resolve))
   console.log(`Backend listening on port ${PORT}`)
+
+  sweepExpiredEvents()
+  setInterval(sweepExpiredEvents, 5 * 60_000)
 
   if (WEBHOOK_URL) {
     const webhookEndpoint = `${WEBHOOK_URL}/webhook`
