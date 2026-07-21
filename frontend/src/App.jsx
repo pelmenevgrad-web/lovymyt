@@ -165,6 +165,7 @@ export default function App() {
         <Route path="/profile/edit" element={<EditProfileScreen />} />
         <Route path="/create"     element={<CreateScreen />} />
         <Route path="/events/:id" element={<EventDetailScreen />} />
+        <Route path="/events/:id/edit" element={<CreateScreen />} />
         <Route path="/events/:id/review" element={<EventReviewScreen />} />
       </Routes>
     </MemoryRouter>

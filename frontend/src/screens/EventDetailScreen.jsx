@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
-  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars,
+  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil,
 } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
 import { Avatar, AvatarStack } from '../components/EventCard.jsx'
@@ -188,6 +188,18 @@ export default function EventDetailScreen() {
             </span>
           )}
         </div>
+        {event.is_creator && (
+          <button
+            onClick={() => navigate(`/events/${id}/edit`)}
+            style={{
+              background: 'var(--card)', color: 'var(--text)', border: '1.5px solid var(--border)', borderRadius: 10,
+              padding: '7px 10px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 5, marginRight: 6,
+            }}
+          >
+            <Pencil size={14} />
+          </button>
+        )}
         <button
           onClick={handleInvite}
           style={{

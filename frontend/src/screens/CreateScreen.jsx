@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import WebApp from '@twa-dev/sdk'
-import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Zap, Search, Plus, X } from 'lucide-react'
+import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Save, Zap, Search, Plus, X, Loader2 } from 'lucide-react'
 import { CATEGORIES } from '../data/mockData.js'
 import { apiFetch } from '../lib/api.js'
 
@@ -85,6 +85,10 @@ function Section({ title, children }) {
 
 export default function CreateScreen() {
   const navigate = useNavigate()
+  const { id: eventId } = useParams()
+  const isEdit = !!eventId
+  const [loadingEvent, setLoadingEvent] = useState(isEdit)
+  const [loadError, setLoadError] = useState(null)
   const [form, setForm] = useState({
     category_id: null,
     title: '',
@@ -124,6 +128,44 @@ export default function CreateScreen() {
     WebApp.onEvent('themeChanged', onTheme)
     return () => WebApp.offEvent('themeChanged', onTheme)
   }, [])
+
+  useEffect(() => {
+    if (!isEdit) return
+    apiFetch(`/events/${eventId}`)
+      .then(({ event }) => {
+        if (!event.is_creator) {
+          setLoadError('Редагувати може тільки організатор')
+          return
+        }
+        setForm(f => ({
+          ...f,
+          category_id: event.category_id,
+          title: event.title,
+          description: event.description ?? '',
+          address_text: event.address_text,
+          start_time: event.start_time.slice(0, 16),
+          max_participants: event.max_participants,
+          min_participants: event.min_participants,
+          budget_type: event.budget_type,
+          budget_amount: event.budget_amount ?? '',
+          age_min: event.age_min ?? '',
+          age_max: event.age_max ?? '',
+          allowed_gender: event.allowed_gender ?? 'any',
+          max_male: event.max_male ?? '',
+          max_female: event.max_female ?? '',
+          lat: event.lat,
+          lng: event.lng,
+          late_join_allowed: event.late_join_allowed,
+          conditions: {
+            with_pets: !!event.conditions?.with_pets,
+            with_kids: !!event.conditions?.with_kids,
+            verified_only: !!event.conditions?.verified_only,
+          },
+        }))
+      })
+      .catch(err => setLoadError(err.message))
+      .finally(() => setLoadingEvent(false))
+  }, [isEdit, eventId])
 
   // Debounced address search via Nominatim (OpenStreetMap geocoder)
   useEffect(() => {
@@ -203,8 +245,8 @@ export default function CreateScreen() {
     setSubmitting(true)
     setSubmitError(null)
     try {
-      const { event } = await apiFetch('/events', {
-        method: 'POST',
+      const { event } = await apiFetch(isEdit ? `/events/${eventId}` : '/events', {
+        method: isEdit ? 'PATCH' : 'POST',
         body: JSON.stringify({
           category_id: form.category_id,
           title: form.title,
@@ -233,12 +275,31 @@ export default function CreateScreen() {
         body: JSON.stringify({ name: s.name.trim(), needed_amount: Number(s.needed_amount), unit: s.unit.trim() || null }),
       }).catch(err => console.error('[Create] failed to add supply:', s.name, err.message))))
 
-      navigate('/')
+      navigate(isEdit ? `/events/${eventId}` : '/')
     } catch (err) {
       setSubmitError(err.message)
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (loadingEvent) {
+    return (
+      <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+        <Loader2 size={28} className="spin" color="var(--text-3)" />
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="page" style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 10, minHeight: '60vh', padding: '0 32px', textAlign: 'center',
+      }}>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>{loadError}</div>
+      </div>
+    )
   }
 
   return (
@@ -250,8 +311,8 @@ export default function CreateScreen() {
           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: 'var(--text)' }}
         >‹</button>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800 }}>Нова зустріч</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Заповни деталі та запроси компанію</p>
+          <h1 style={{ fontSize: 22, fontWeight: 800 }}>{isEdit ? 'Редагувати захід' : 'Нова зустріч'}</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-2)' }}>{isEdit ? 'Зміни деталі заходу' : 'Заповни деталі та запроси компанію'}</p>
         </div>
       </div>
 
@@ -585,7 +646,9 @@ export default function CreateScreen() {
           onClick={handleCreate}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-            {submitting ? 'Створюємо…' : <>Створити і відкрити чат <Rocket size={18} /></>}
+            {isEdit
+              ? (submitting ? 'Зберігаємо…' : <>Зберегти зміни <Save size={18} /></>)
+              : (submitting ? 'Створюємо…' : <>Створити і відкрити чат <Rocket size={18} /></>)}
           </span>
         </button>
       </div>

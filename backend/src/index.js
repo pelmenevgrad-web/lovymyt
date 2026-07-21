@@ -236,6 +236,60 @@ app.post('/events', requireAuth, async (req, res) => {
   res.status(201).json({ event: shapeEvent(row) })
 })
 
+// Edit an event — organizer only
+app.patch('/events/:id', requireAuth, async (req, res) => {
+  const { data: existing, error: fetchErr } = await supabase
+    .from('events')
+    .select('creator_id')
+    .eq('id', req.params.id)
+    .single()
+
+  if (fetchErr) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  if (existing.creator_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки організатор може редагувати захід' })
+  }
+
+  const {
+    category_id, title, description, address_text, start_time, lat, lng,
+    max_participants, min_participants, budget_type, budget_amount,
+    age_min, age_max, late_join_allowed, conditions,
+    allowed_gender, max_male, max_female,
+  } = req.body ?? {}
+
+  if (!category_id || !title?.trim() || !address_text?.trim() || !start_time || lat == null || lng == null) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+  if (allowed_gender && !['any', 'male', 'female'].includes(allowed_gender)) {
+    return res.status(400).json({ error: 'allowed_gender must be "any", "male" or "female"' })
+  }
+
+  const { data: row, error } = await supabase
+    .from('events')
+    .update({
+      category_id, title: title.trim(), description: description?.trim() || null,
+      address_text: address_text.trim(),
+      start_time, lat, lng,
+      max_participants, min_participants, budget_type,
+      budget_amount: budget_amount || null,
+      age_min: age_min || null, age_max: age_max || null,
+      allowed_gender: allowed_gender || 'any',
+      max_male: max_male || null, max_female: max_female || null,
+      conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
+    })
+    .eq('id', req.params.id)
+    .select(EVENT_SELECT)
+    .single()
+
+  if (error) {
+    console.error('Updating event failed:', error.message)
+    return res.status(500).json({ error: 'Failed to update event' })
+  }
+
+  res.json({ event: shapeEvent(row) })
+})
+
 // Single event's full detail — includes the caller's own participation
 // status (if authenticated) so the detail page knows whether to show
 // "Приєднатися" or "Ви вже приєднались".
