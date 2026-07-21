@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Star, Loader2, AlertTriangle, Check } from 'lucide-react'
 import { Avatar } from '../components/EventCard.jsx'
+import BackButton from '../components/BackButton.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 
@@ -103,10 +104,7 @@ export default function EventReviewScreen() {
   return (
     <div className="page">
       <div style={{ padding: '16px 16px 8px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button
-          onClick={() => navigate(-1)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: 'var(--text)' }}
-        >‹</button>
+        <BackButton />
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 800 }}>Оцінити учасників</h1>
           <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Як пройшов захід? Постав оцінку тим, з ким зустрічався</p>

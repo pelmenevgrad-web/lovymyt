@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { io } from 'socket.io-client'
 import { Send, Loader2, AlertTriangle } from 'lucide-react'
 import { Avatar } from '../components/EventCard.jsx'
+import BackButton from '../components/BackButton.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch, API_URL } from '../lib/api.js'
 
@@ -12,7 +13,6 @@ function formatTime(iso) {
 
 export default function EventChatScreen() {
   const { id } = useParams()
-  const navigate = useNavigate()
   const { user } = useAuth()
   const [messages, setMessages] = useState(null)
   const [status, setStatus] = useState('pending') // pending | ok | error
@@ -89,10 +89,7 @@ export default function EventChatScreen() {
   return (
     <div className="page-full" style={{ display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '16px 16px 8px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-        <button
-          onClick={() => navigate(-1)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: 'var(--text)' }}
-        >‹</button>
+        <BackButton />
         <h1 style={{ fontSize: 18, fontWeight: 800 }}>Чат заходу</h1>
       </div>
 

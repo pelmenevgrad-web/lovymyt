@@ -1,14 +1,6 @@
 import { BadgeCheck, Zap, Clock, MapPin } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
-
-function formatTime(iso) {
-  const d = new Date(iso)
-  const now = Date.now()
-  const diff = d - now
-  if (Math.abs(diff) < 60_000) return 'Зараз'
-  if (diff > 0 && diff < 60 * 60_000) return `через ${Math.round(diff / 60_000)} хв`
-  return d.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
-}
+import { formatCountdown } from '../lib/format.js'
 
 function Avatar({ name, url, size = 36 }) {
   const initials = name?.split(' ').map(w => w[0]).slice(0, 2).join('') ?? '?'
@@ -100,7 +92,7 @@ export default function EventCard({ event, onClick, compact = false }) {
 
       {/* Meta row */}
       <div style={{ display: 'flex', gap: 12, fontSize: 13, color: 'var(--text-2)', marginBottom: 10 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={13} /> {formatTime(event.start_time)}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={13} /> {formatCountdown(event.start_time)}</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><MapPin size={13} /> {event.address_text}</span>
       </div>
 

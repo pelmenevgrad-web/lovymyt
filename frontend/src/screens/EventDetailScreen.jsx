@@ -6,9 +6,11 @@ import {
 } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
 import { Avatar, AvatarStack } from '../components/EventCard.jsx'
+import BackButton from '../components/BackButton.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
+import { formatCountdown } from '../lib/format.js'
 
 function SupplyItem({ supply, userId, onClaim }) {
   const myClaim = supply.claims.find(c => c.user_id === userId)
@@ -98,6 +100,13 @@ export default function EventDetailScreen() {
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState(null)
   const [supplies, setSupplies] = useState([])
+  const [, forceTick] = useState(0)
+
+  // Keeps the countdown to start ticking without needing a full data refetch
+  useEffect(() => {
+    const timer = setInterval(() => forceTick(t => t + 1), 30_000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     apiFetch(`/events/${id}`)
@@ -174,10 +183,7 @@ export default function EventDetailScreen() {
     <div className="page">
       {/* Header */}
       <div style={{ padding: '16px 16px 8px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button
-          onClick={() => navigate(-1)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: 'var(--text)' }}
-        >‹</button>
+        <BackButton />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
           <span className="badge" style={{ background: statusMeta.bg, color: statusMeta.color }}>
             {event.status === 'active' && '● '}{statusMeta.label}
@@ -221,10 +227,16 @@ export default function EventDetailScreen() {
           }}>
             <cat.Icon size={24} />
           </div>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 600 }}>{cat.name}</div>
             <h1 style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.25 }}>{event.title}</h1>
           </div>
+          <span className="badge" style={{
+            background: 'var(--accent-light)', color: 'var(--accent)', flexShrink: 0,
+            fontSize: 12, padding: '5px 10px',
+          }}>
+            <Clock size={11} /> {formatCountdown(event.start_time)}
+          </span>
         </div>
 
         {/* Creator */}

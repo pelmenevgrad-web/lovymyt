@@ -6,6 +6,7 @@ import WebApp from '@twa-dev/sdk'
 import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Save, Zap, Search, Plus, X, Loader2 } from 'lucide-react'
 import { CATEGORIES } from '../data/mockData.js'
 import { apiFetch } from '../lib/api.js'
+import BackButton from '../components/BackButton.jsx'
 
 // Kyiv center — initial position for the location picker below
 const INITIAL_LAT = 50.4501
@@ -306,10 +307,7 @@ export default function CreateScreen() {
     <div className="page">
       {/* Header */}
       <div style={{ padding: '16px 16px 8px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button
-          onClick={() => navigate(-1)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: 'var(--text)' }}
-        >‹</button>
+        <BackButton />
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800 }}>{isEdit ? 'Редагувати захід' : 'Нова зустріч'}</h1>
           <p style={{ fontSize: 13, color: 'var(--text-2)' }}>{isEdit ? 'Зміни деталі заходу' : 'Заповни деталі та запроси компанію'}</p>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
+import BackButton from '../components/BackButton.jsx'
 
 const BIO_MAX = 300
 
@@ -38,10 +39,7 @@ export default function EditProfileScreen() {
   return (
     <div className="page">
       <div style={{ padding: '16px 16px 8px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button
-          onClick={() => navigate(-1)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: 'var(--text)' }}
-        >‹</button>
+        <BackButton />
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800 }}>Редагувати профіль</h1>
           <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Ім'я та аватар беруться з Telegram</p>
