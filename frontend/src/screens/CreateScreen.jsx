@@ -1,59 +1,15 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
-import L from 'leaflet'
 import WebApp from '@twa-dev/sdk'
-import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Save, Zap, Search, Plus, X, Loader2 } from 'lucide-react'
+import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Save, Zap, Plus, X, Loader2 } from 'lucide-react'
 import { CATEGORIES } from '../data/mockData.js'
 import { apiFetch } from '../lib/api.js'
 import BackButton from '../components/BackButton.jsx'
+import LocationSearchPicker from '../components/LocationSearchPicker.jsx'
 
 // Kyiv center — initial position for the location picker below
 const INITIAL_LAT = 50.4501
 const INITIAL_LNG = 30.5234
-
-const pickerIcon = L.divIcon({
-  className: '',
-  html: `<div style="width:22px;height:22px;border-radius:50%;background:var(--accent);border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);"></div>`,
-  iconSize: [22, 22],
-  iconAnchor: [11, 11],
-})
-
-function LocationPicker({ lat, lng, onChange, isDark, mapRef }) {
-  function ClickCapture() {
-    useMapEvents({ click: (e) => onChange(e.latlng.lat, e.latlng.lng) })
-    return null
-  }
-
-  return (
-    <MapContainer
-      ref={mapRef}
-      center={[lat, lng]}
-      zoom={13}
-      style={{ height: 180, width: '100%', borderRadius: 'var(--radius-md)', marginTop: 8 }}
-      zoomControl={false}
-    >
-      <TileLayer
-        url={isDark
-          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
-        attribution=""
-      />
-      <ClickCapture />
-      <Marker
-        position={[lat, lng]}
-        icon={pickerIcon}
-        draggable
-        eventHandlers={{
-          dragend: (e) => {
-            const p = e.target.getLatLng()
-            onChange(p.lat, p.lng)
-          },
-        }}
-      />
-    </MapContainer>
-  )
-}
 
 const BUDGET_OPTIONS = [
   { value: 'free',      Icon: Gift,       label: 'Безкоштовно' },
@@ -118,10 +74,6 @@ export default function CreateScreen() {
   const [isDark, setIsDark] = useState(
     document.documentElement.getAttribute('data-theme') === 'dark'
   )
-  const [suggestions, setSuggestions] = useState([])
-  const [searching, setSearching] = useState(false)
-  const [addressFocused, setAddressFocused] = useState(false)
-  const pickerMapRef = useRef(null)
 
   useEffect(() => {
     const onTheme = () =>
@@ -167,62 +119,6 @@ export default function CreateScreen() {
       .catch(err => setLoadError(err.message))
       .finally(() => setLoadingEvent(false))
   }, [isEdit, eventId])
-
-  // Debounced address search via Nominatim (OpenStreetMap geocoder)
-  useEffect(() => {
-    const query = form.address_text.trim()
-    if (query.length < 3) {
-      setSuggestions([])
-      return
-    }
-    const controller = new AbortController()
-    setSearching(true)
-    const timer = setTimeout(() => {
-      fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=ua&q=${encodeURIComponent(query)}`, {
-        signal: controller.signal,
-      })
-        .then(r => r.json())
-        .then(results => setSuggestions(results))
-        .catch(() => {})
-        .finally(() => setSearching(false))
-    }, 500)
-    return () => { clearTimeout(timer); controller.abort() }
-  }, [form.address_text])
-
-  // "Київська обл., Києво-Святошинський р-н, м. Київ, вул. Хрещатик, 15, 01001"
-  // → "Київ, вул. Хрещатик 15" — just locality + street + house number
-  function formatShortAddress(result) {
-    const a = result?.address ?? {}
-    const locality = a.city ?? a.town ?? a.village ?? a.municipality ?? a.county ?? ''
-    const street = a.road ?? a.pedestrian ?? a.footway ?? ''
-    const streetPart = [street, a.house_number].filter(Boolean).join(' ')
-    const parts = [locality, streetPart].filter(Boolean)
-    if (parts.length > 0) return parts.join(', ')
-    return result?.display_name || null
-  }
-
-  // Reverse-geocodes wherever the user taps/drags the pin so the address field is
-  // never empty (which used to leave "Створити" disabled) — falls back to raw
-  // coordinates if the point is somewhere Nominatim has no data for at all (forest, etc).
-  async function handleMapPointChange(lat, lng) {
-    setForm(f => ({ ...f, lat, lng }))
-    const fallback = `${lat.toFixed(5)}, ${lng.toFixed(5)}`
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&zoom=16&lat=${lat}&lon=${lng}`)
-      const result = await res.json()
-      setForm(f => ({ ...f, address_text: formatShortAddress(result) ?? fallback }))
-    } catch {
-      setForm(f => ({ ...f, address_text: fallback }))
-    }
-  }
-
-  function selectSuggestion(result) {
-    const lat = parseFloat(result.lat)
-    const lng = parseFloat(result.lon)
-    setForm(f => ({ ...f, address_text: formatShortAddress(result), lat, lng }))
-    setSuggestions([])
-    pickerMapRef.current?.flyTo([lat, lng], 15)
-  }
 
   const set = (key, value) => setForm(f => ({ ...f, [key]: value }))
   const toggleCond = (key) => setForm(f => ({
@@ -363,54 +259,12 @@ export default function CreateScreen() {
 
       {/* Location */}
       <Section title="Місце">
-        <div style={{ position: 'relative' }}>
-          <div style={{ position: 'relative' }}>
-            <Search size={16} color="var(--text-3)" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
-            <input
-              type="text"
-              placeholder="Адреса або назва місця"
-              value={form.address_text}
-              onChange={e => set('address_text', e.target.value)}
-              onFocus={() => setAddressFocused(true)}
-              onBlur={() => setTimeout(() => setAddressFocused(false), 150)}
-              style={{ paddingLeft: 38 }}
-            />
-          </div>
-
-          {addressFocused && (searching || suggestions.length > 0) && (
-            <div className="card" style={{
-              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1000,
-              marginTop: 4, maxHeight: 220, overflowY: 'auto', padding: '4px 0',
-            }}>
-              {searching && suggestions.length === 0 && (
-                <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-3)' }}>Шукаємо…</div>
-              )}
-              {suggestions.map(s => (
-                <button
-                  key={s.place_id}
-                  onClick={() => selectSuggestion(s)}
-                  style={{
-                    display: 'block', width: '100%', textAlign: 'left',
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    padding: '10px 14px', fontSize: 13, color: 'var(--text)',
-                  }}
-                >
-                  {s.display_name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>
-          Обери підказку вище або торкнись карти, щоб вибрати точку
-        </div>
-        <LocationPicker
+        <LocationSearchPicker
+          addressText={form.address_text}
           lat={form.lat}
           lng={form.lng}
           isDark={isDark}
-          mapRef={pickerMapRef}
-          onChange={handleMapPointChange}
+          onChange={({ address_text, lat, lng }) => setForm(f => ({ ...f, address_text, lat, lng }))}
         />
       </Section>
 

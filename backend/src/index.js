@@ -83,6 +83,39 @@ async function notifyEventPeople(eventId, excludeUserId, textBuilder, startParam
   await Promise.all([...recipients.values()].map(tgId => notifyUser(tgId, text, startParam, buttonLabel)))
 }
 
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.asin(Math.sqrt(a))
+}
+
+// Tells users who opted in (either "everywhere" or within their set radius)
+// about a freshly created event, skipping its own creator.
+async function notifyAboutNewEvent(event, creatorId) {
+  const { data: candidates, error } = await supabase
+    .from('users')
+    .select('telegram_id, notify_all_events, notify_lat, notify_lng, notify_radius_km')
+    .neq('id', creatorId)
+    .or('notify_all_events.eq.true,notify_radius_km.not.is.null')
+
+  if (error) {
+    console.error('Fetching notify candidates failed:', error.message)
+    return
+  }
+
+  const text = `🆕 Новий захід поруч: «${event.title}»\n📍 ${event.address_text}`
+
+  await Promise.all(candidates.map(u => {
+    const inRadius = u.notify_radius_km && u.notify_lat != null && u.notify_lng != null
+      && haversineKm(u.notify_lat, u.notify_lng, event.lat, event.lng) <= u.notify_radius_km
+    if (!(u.notify_all_events || inRadius)) return null
+    return notifyUser(u.telegram_id, text, `event_${event.id}`)
+  }))
+}
+
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -156,7 +189,7 @@ function tryAuth(req) {
 
 // Update the authenticated user's own editable profile fields
 app.patch('/users/me', requireAuth, async (req, res) => {
-  const { bio, gender } = req.body ?? {}
+  const { bio, gender, notify_lat, notify_lng, notify_radius_km, notify_all_events } = req.body ?? {}
   const patch = {}
 
   if (bio !== undefined) {
@@ -172,6 +205,13 @@ app.patch('/users/me', requireAuth, async (req, res) => {
     }
     patch.gender = gender
   }
+
+  if (notify_all_events !== undefined) {
+    patch.notify_all_events = !!notify_all_events
+  }
+  if (notify_lat !== undefined) patch.notify_lat = notify_lat
+  if (notify_lng !== undefined) patch.notify_lng = notify_lng
+  if (notify_radius_km !== undefined) patch.notify_radius_km = notify_radius_km
 
   if (Object.keys(patch).length === 0) {
     return res.status(400).json({ error: 'No editable fields provided' })
@@ -281,7 +321,10 @@ app.post('/events', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to create event' })
   }
 
-  res.status(201).json({ event: shapeEvent(row) })
+  const shaped = shapeEvent(row)
+  notifyAboutNewEvent(shaped, req.auth.sub).catch(() => {})
+
+  res.status(201).json({ event: shaped })
 })
 
 // Edit an event — organizer only
