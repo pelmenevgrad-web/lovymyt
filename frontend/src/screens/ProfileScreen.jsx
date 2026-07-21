@@ -1,7 +1,15 @@
 import { useNavigate } from 'react-router-dom'
-import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone } from 'lucide-react'
+import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/EventCard.jsx'
+import { appLink, shareViaTelegram } from '../lib/telegram.js'
+
+function shareApp() {
+  shareViaTelegram(
+    appLink(),
+    'Приєднуйся до ЛовиМить — знаходь компанію для спільного дозвілля поруч! 🎉',
+  )
+}
 
 function Stars({ rating }) {
   const rounded = Math.round(rating)
@@ -152,6 +160,17 @@ export default function ProfileScreen() {
           </div>
         </div>
       )}
+
+      {/* Share app */}
+      <div style={{ margin: '12px 16px 0' }}>
+        <button
+          className="btn btn-ghost"
+          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+          onClick={shareApp}
+        >
+          <Share2 size={16} /> Поділитися застосунком
+        </button>
+      </div>
 
       {/* Stars balance */}
       <div style={{ margin: '12px 16px 0' }} className="card">

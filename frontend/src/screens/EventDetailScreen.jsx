@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
-  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake,
+  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus,
 } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
 import { Avatar, AvatarStack } from '../components/EventCard.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
+import { appLink, shareViaTelegram } from '../lib/telegram.js'
 
 function SupplyItem({ supply, userId, onClaim }) {
   const myClaim = supply.claims.find(c => c.user_id === userId)
@@ -162,6 +163,13 @@ export default function EventDetailScreen() {
   const eventStarted = new Date(event.start_time) < new Date()
   const canReview = eventStarted && (event.is_creator || alreadyJoined)
 
+  function handleInvite() {
+    shareViaTelegram(
+      appLink(`event_${event.id}`),
+      `Приєднуйся до заходу «${event.title}» в ЛовиМить! ${formatDateTime(event.start_time)} • ${event.address_text}`,
+    )
+  }
+
   return (
     <div className="page">
       {/* Header */}
@@ -170,7 +178,7 @@ export default function EventDetailScreen() {
           onClick={() => navigate(-1)}
           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: 'var(--text)' }}
         >‹</button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
           <span className="badge" style={{ background: statusMeta.bg, color: statusMeta.color }}>
             {event.status === 'active' && '● '}{statusMeta.label}
           </span>
@@ -180,6 +188,16 @@ export default function EventDetailScreen() {
             </span>
           )}
         </div>
+        <button
+          onClick={handleInvite}
+          style={{
+            background: 'var(--accent-light)', color: 'var(--accent)', border: 'none', borderRadius: 10,
+            padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+          }}
+        >
+          <UserPlus size={14} /> Запросити
+        </button>
       </div>
 
       <div style={{ padding: '8px 16px 0' }}>

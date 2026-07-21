@@ -150,8 +150,13 @@ export default function App() {
     return <WelcomeScreen onJoin={handleJoin} />
   }
 
+  // Invite links open as https://t.me/lovymyt_bot?startapp=event_<uuid> — land
+  // straight on that event instead of the map.
+  const startParam = WebApp.initDataUnsafe?.start_param
+  const initialPath = startParam?.startsWith('event_') ? `/events/${startParam.slice('event_'.length)}` : '/'
+
   return (
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/"           element={<WithNav><MapScreen /></WithNav>} />
         <Route path="/categories" element={<WithNav><CategoriesScreen /></WithNav>} />
