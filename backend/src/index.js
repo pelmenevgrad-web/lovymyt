@@ -32,7 +32,7 @@ export const supabase = createClient(
 // Telegraf bot
 const bot = new Telegraf(BOT_TOKEN)
 
-bot.start((ctx) => ctx.reply('Добро пожаловать в ЛовиМить! Открой Mini App.'))
+bot.start((ctx) => ctx.reply('Ласкаво просимо в ЛовіМіть! Відкрий для себе новий світ емоцій.'))
 bot.help((ctx) => ctx.reply('Используй кнопку меню для запуска приложения.'))
 
 // Health check
