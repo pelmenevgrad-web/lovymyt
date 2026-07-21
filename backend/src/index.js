@@ -273,6 +273,41 @@ app.get('/events/:id', async (req, res) => {
   })
 })
 
+// Events the caller either created or has joined — for the profile's "Мої заходи"
+app.get('/users/me/events', requireAuth, async (req, res) => {
+  const { data: joinedRows, error: joinedErr } = await supabase
+    .from('event_participants')
+    .select('event_id')
+    .eq('user_id', req.auth.sub)
+    .eq('status', 'accepted')
+
+  if (joinedErr) {
+    console.error('Fetching joined event ids failed:', joinedErr.message)
+    return res.status(500).json({ error: 'Failed to load your events' })
+  }
+
+  const joinedIds = joinedRows.map(r => r.event_id)
+  let query = supabase
+    .from('events')
+    .select(EVENT_SELECT)
+    .order('start_time', { ascending: true })
+
+  query = joinedIds.length > 0
+    ? query.or(`creator_id.eq.${req.auth.sub},id.in.(${joinedIds.join(',')})`)
+    : query.eq('creator_id', req.auth.sub)
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error('Fetching my events failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load your events' })
+  }
+
+  res.json({
+    events: data.map(row => ({ ...shapeEvent(row), is_creator: row.creator_id === req.auth.sub })),
+  })
+})
+
 const GENDER_LABEL = { male: 'чоловіків', female: 'жінок' }
 
 // Join an event — instant acceptance for now (no organizer approval step yet)

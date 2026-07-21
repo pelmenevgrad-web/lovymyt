@@ -1,8 +1,11 @@
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/EventCard.jsx'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
+import { apiFetch } from '../lib/api.js'
+import { CATEGORIES } from '../data/mockData.js'
 
 function shareApp() {
   shareViaTelegram(
@@ -56,6 +59,14 @@ function CenteredMessage({ icon: Icon, title, text }) {
 export default function ProfileScreen() {
   const navigate = useNavigate()
   const { user, status, error } = useAuth()
+  const [myEvents, setMyEvents] = useState(null)
+
+  useEffect(() => {
+    if (status !== 'ok') return
+    apiFetch('/users/me/events')
+      .then(({ events }) => setMyEvents(events))
+      .catch(err => console.error('[Profile] failed to load my events:', err.message))
+  }, [status])
 
   if (status === 'pending') {
     return (
@@ -210,9 +221,46 @@ export default function ProfileScreen() {
       {/* My events */}
       <div style={{ padding: '20px 16px 0' }}>
         <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 12 }}>Мої заходи</div>
-        <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
-          Поки що немає — створи перший захід через кнопку «Створити».
-        </div>
+        {myEvents === null ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
+            <Loader2 size={20} className="spin" color="var(--text-3)" />
+          </div>
+        ) : myEvents.length === 0 ? (
+          <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
+            Поки що немає — створи перший захід через кнопку «Створити».
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {myEvents.map(e => {
+              const cat = CATEGORIES.find(c => c.id === e.category_id)
+              const CatIcon = cat?.Icon
+              return (
+                <div
+                  key={e.id}
+                  className="card"
+                  onClick={() => navigate(`/events/${e.id}`)}
+                  style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
+                >
+                  <div style={{ color: cat?.color, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {CatIcon && <CatIcon size={22} />}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</span>
+                      {e.is_creator && (
+                        <span className="badge" style={{ background: 'var(--accent-light)', color: 'var(--accent)', flexShrink: 0 }}>Організатор</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
+                      {new Date(e.start_time).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 18, color: 'var(--text-3)' }}>›</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Reviews */}

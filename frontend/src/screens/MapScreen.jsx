@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import WebApp from '@twa-dev/sdk'
-import { LocateFixed, Check } from 'lucide-react'
+import { LocateFixed, Check, Loader2 } from 'lucide-react'
 import CategoryChips from '../components/CategoryChips.jsx'
 import EventCard from '../components/EventCard.jsx'
 import { apiFetch } from '../lib/api.js'
@@ -118,6 +118,7 @@ export default function MapScreen() {
   )
   const mapRef = useRef(null)
   const [events, setEvents] = useState([])
+  const [eventsLoaded, setEventsLoaded] = useState(false)
 
   useEffect(() => {
     const onTheme = () =>
@@ -130,15 +131,8 @@ export default function MapScreen() {
     apiFetch('/events')
       .then(({ events }) => setEvents(events))
       .catch(err => console.error('[Map] failed to load events:', err.message))
+      .finally(() => setEventsLoaded(true))
   }, [])
-
-  // Fit the map to show every fetched event instead of always sitting on Kyiv center
-  useEffect(() => {
-    if (events.length > 0 && mapRef.current) {
-      const bounds = L.latLngBounds(events.map(e => [e.lat, e.lng]))
-      mapRef.current.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 })
-    }
-  }, [events])
 
   const filtered = selectedCat === 0
     ? events
@@ -185,37 +179,45 @@ export default function MapScreen() {
         <CategoryChips categories={activeCategories} selected={selectedCat} onChange={setSelectedCat} />
       </div>
 
-      {/* Map */}
-      <MapContainer
-        center={DEFAULT_CENTER}
-        zoom={14}
-        style={{ flex: 1, width: '100%', height: '100%' }}
-        zoomControl={false}
-        ref={mapRef}
-      >
-        <TileLayer
-          url={isDark
-            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
-          attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
-        />
+      {/* Map — mounted only once we know real event locations, so it opens
+          directly on the right view instead of starting at Kyiv and jumping */}
+      {eventsLoaded ? (
+        <MapContainer
+          ref={mapRef}
+          {...(events.length > 0
+            ? { bounds: L.latLngBounds(events.map(e => [e.lat, e.lng])), boundsOptions: { padding: [60, 60], maxZoom: 15 } }
+            : { center: DEFAULT_CENTER, zoom: 14 })}
+          style={{ flex: 1, width: '100%', height: '100%' }}
+          zoomControl={false}
+        >
+          <TileLayer
+            url={isDark
+              ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+              : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
+            attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+          />
 
-        {filtered.map((event) => {
-          const cat = CATEGORIES.find(c => c.id === event.category_id) ?? CATEGORIES[1]
-          const isActive = event.status === 'active'
-          const joinableNow = isActive && event.late_join_allowed
-          return (
-            <Marker
-              key={event.id}
-              position={[event.lat, event.lng]}
-              icon={createMarker(cat, isActive, joinableNow)}
-              eventHandlers={{ click: () => handleMarkerClick(event) }}
-            />
-          )
-        })}
+          {filtered.map((event) => {
+            const cat = CATEGORIES.find(c => c.id === event.category_id) ?? CATEGORIES[1]
+            const isActive = event.status === 'active'
+            const joinableNow = isActive && event.late_join_allowed
+            return (
+              <Marker
+                key={event.id}
+                position={[event.lat, event.lng]}
+                icon={createMarker(cat, isActive, joinableNow)}
+                eventHandlers={{ click: () => handleMarkerClick(event) }}
+              />
+            )
+          })}
 
-        <LocateButton onLocate={() => {}} />
-      </MapContainer>
+          <LocateButton onLocate={() => {}} />
+        </MapContainer>
+      ) : (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Loader2 size={28} className="spin" color="var(--text-3)" />
+        </div>
+      )}
 
       {/* Bottom event count badge */}
       {!selectedEvent && (
