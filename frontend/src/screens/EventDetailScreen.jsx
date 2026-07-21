@@ -5,7 +5,7 @@ import {
   Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake,
 } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
-import { Avatar } from '../components/EventCard.jsx'
+import { Avatar, AvatarStack } from '../components/EventCard.jsx'
 import { apiFetch } from '../lib/api.js'
 
 const BUDGET_LABEL = {
@@ -144,6 +144,7 @@ export default function EventDetailScreen() {
 
         {/* Participant progress */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <AvatarStack people={event.participant_avatars} size={22} />
           <div style={{ flex: 1, height: 6, borderRadius: 99, background: 'var(--border)' }}>
             <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: cat.color }} />
           </div>

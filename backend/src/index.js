@@ -137,10 +137,13 @@ app.patch('/users/me', requireAuth, async (req, res) => {
   res.json({ user })
 })
 
-// Shapes a DB row (with embedded creator/participant count) into the flat
-// object shape the frontend already works with (same fields as the old mocks).
+const EVENT_SELECT = '*, creator:users(first_name, avatar_url), participants:event_participants(status, user:users(id, first_name, avatar_url))'
+
+// Shapes a DB row (with embedded creator/participants) into the flat object
+// shape the frontend already works with (same fields as the old mocks).
 function shapeEvent(row) {
   const { late_join_allowed, ...conditions } = row.conditions ?? {}
+  const accepted = (row.participants ?? []).filter(p => p.status === 'accepted' && p.user)
   return {
     id: row.id,
     title: row.title,
@@ -151,7 +154,10 @@ function shapeEvent(row) {
     lng: row.lng,
     address_text: row.address_text,
     max_participants: row.max_participants,
-    current_participants: row.participants?.[0]?.count ?? 0,
+    current_participants: accepted.length,
+    participant_avatars: accepted.slice(0, 4).map(p => ({
+      id: p.user.id, first_name: p.user.first_name, avatar_url: p.user.avatar_url,
+    })),
     creator_name: row.creator?.first_name ?? 'Користувач',
     creator_avatar_url: row.creator?.avatar_url ?? null,
     budget_type: row.budget_type,
@@ -166,7 +172,7 @@ function shapeEvent(row) {
 app.get('/events', async (_req, res) => {
   const { data, error } = await supabase
     .from('events')
-    .select('*, creator:users(first_name, avatar_url), participants:event_participants(count)')
+    .select(EVENT_SELECT)
     .in('status', ['planned', 'gathering', 'active'])
     .order('start_time', { ascending: true })
 
@@ -200,7 +206,7 @@ app.post('/events', requireAuth, async (req, res) => {
       age_min: age_min || null, age_max: age_max || null,
       conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
     })
-    .select('*, creator:users(first_name, avatar_url), participants:event_participants(count)')
+    .select(EVENT_SELECT)
     .single()
 
   if (error) {
@@ -217,7 +223,7 @@ app.post('/events', requireAuth, async (req, res) => {
 app.get('/events/:id', async (req, res) => {
   const { data, error } = await supabase
     .from('events')
-    .select('*, creator:users(first_name, avatar_url), participants:event_participants(count)')
+    .select(EVENT_SELECT)
     .eq('id', req.params.id)
     .single()
 
@@ -250,6 +256,19 @@ app.get('/events/:id', async (req, res) => {
 
 // Join an event — instant acceptance for now (no organizer approval step yet)
 app.post('/events/:id/join', requireAuth, async (req, res) => {
+  const { data: event, error: eventErr } = await supabase
+    .from('events')
+    .select('creator_id')
+    .eq('id', req.params.id)
+    .single()
+
+  if (eventErr) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  if (event.creator_id === req.auth.sub) {
+    return res.status(400).json({ error: 'Не можна приєднатися до власного заходу' })
+  }
+
   const { data, error } = await supabase
     .from('event_participants')
     .upsert(

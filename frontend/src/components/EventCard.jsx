@@ -28,6 +28,25 @@ function Avatar({ name, url, size = 36 }) {
 
 export { Avatar }
 
+export function AvatarStack({ people, size = 18 }) {
+  if (!people || people.length === 0) return null
+  return (
+    <span style={{ display: 'inline-flex' }}>
+      {people.map((p, i) => (
+        <span
+          key={p.id}
+          style={{
+            marginLeft: i === 0 ? 0 : -6, display: 'flex',
+            border: '1.5px solid var(--card)', borderRadius: '50%',
+          }}
+        >
+          <Avatar name={p.first_name} url={p.avatar_url} size={size} />
+        </span>
+      ))}
+    </span>
+  )
+}
+
 export default function EventCard({ event, onClick, compact = false }) {
   const cat    = CATEGORIES.find(c => c.id === event.category_id) ?? CATEGORIES[0]
   const status = STATUS_META[event.status] ?? STATUS_META.planned
@@ -93,6 +112,8 @@ export default function EventCard({ event, onClick, compact = false }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <AvatarStack people={event.participant_avatars} />
+
           {/* Participant bar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <div style={{ width: 52, height: 5, borderRadius: 99, background: 'var(--border)' }}>
