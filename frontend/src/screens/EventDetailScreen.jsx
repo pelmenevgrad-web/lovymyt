@@ -134,7 +134,9 @@ export default function EventDetailScreen() {
             {event.current_participants}/{event.max_participants} учасників
             {event.min_participants ? ` (мінімум ${event.min_participants})` : ''}
           </ConditionRow>
-          <ConditionRow Icon={budget.Icon}>{budget.label}</ConditionRow>
+          <ConditionRow Icon={budget.Icon}>
+            {budget.label}{event.budget_amount ? ` — ${event.budget_amount} грн` : ''}
+          </ConditionRow>
           {(event.age_min || event.age_max) && (
             <ConditionRow Icon={Users}>
               Вік: {event.age_min ?? '0'}–{event.age_max ?? '∞'}

@@ -161,6 +161,7 @@ function shapeEvent(row) {
     creator_name: row.creator?.first_name ?? 'Користувач',
     creator_avatar_url: row.creator?.avatar_url ?? null,
     budget_type: row.budget_type,
+    budget_amount: row.budget_amount,
     age_min: row.age_min,
     age_max: row.age_max,
     late_join_allowed: late_join_allowed ?? false,
@@ -187,8 +188,8 @@ app.get('/events', async (_req, res) => {
 // Create a new event owned by the authenticated user
 app.post('/events', requireAuth, async (req, res) => {
   const {
-    category_id, title, address_text, start_time, lat, lng,
-    max_participants, min_participants, budget_type,
+    category_id, title, description, address_text, start_time, lat, lng,
+    max_participants, min_participants, budget_type, budget_amount,
     age_min, age_max, late_join_allowed, conditions,
   } = req.body ?? {}
 
@@ -200,9 +201,11 @@ app.post('/events', requireAuth, async (req, res) => {
     .from('events')
     .insert({
       creator_id: req.auth.sub,
-      category_id, title: title.trim(), address_text: address_text.trim(),
+      category_id, title: title.trim(), description: description?.trim() || null,
+      address_text: address_text.trim(),
       start_time, lat, lng,
       max_participants, min_participants, budget_type,
+      budget_amount: budget_amount || null,
       age_min: age_min || null, age_max: age_max || null,
       conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
     })

@@ -82,11 +82,13 @@ export default function CreateScreen() {
   const [form, setForm] = useState({
     category_id: null,
     title: '',
+    description: '',
     address_text: '',
     start_time: '',
     max_participants: 6,
     min_participants: 2,
     budget_type: 'free',
+    budget_amount: '',
     age_min: '',
     age_max: '',
     lat: INITIAL_LAT,
@@ -174,9 +176,11 @@ export default function CreateScreen() {
           start_time: new Date(form.start_time).toISOString(),
           lat: form.lat,
           lng: form.lng,
+          description: form.description.trim() || null,
           max_participants: form.max_participants,
           min_participants: form.min_participants,
           budget_type: form.budget_type,
+          budget_amount: form.budget_amount ? Number(form.budget_amount) : null,
           age_min: form.age_min ? Number(form.age_min) : null,
           age_max: form.age_max ? Number(form.age_max) : null,
           late_join_allowed: form.late_join_allowed,
@@ -237,6 +241,18 @@ export default function CreateScreen() {
           maxLength={80}
           value={form.title}
           onChange={e => set('title', e.target.value)}
+        />
+      </Section>
+
+      {/* Description */}
+      <Section title="Про захід (необов'язково)">
+        <textarea
+          placeholder="Що будете робити, що взяти з собою тощо"
+          maxLength={500}
+          rows={3}
+          value={form.description}
+          onChange={e => set('description', e.target.value)}
+          style={{ resize: 'none' }}
         />
       </Section>
 
@@ -374,6 +390,16 @@ export default function CreateScreen() {
             )
           })}
         </div>
+        {form.budget_type !== 'free' && (
+          <input
+            type="number"
+            min={0}
+            placeholder={form.budget_type === 'shared' ? 'Загальна сума, грн' : 'Сума з кожного, грн'}
+            value={form.budget_amount}
+            onChange={e => set('budget_amount', e.target.value)}
+            style={{ marginTop: 8 }}
+          />
+        )}
       </Section>
 
       {/* Age range */}
