@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { io } from 'socket.io-client'
-import { Send, Loader2, AlertTriangle } from 'lucide-react'
+import { Send, Loader2, AlertTriangle, Camera, X } from 'lucide-react'
 import { Avatar } from '../components/EventCard.jsx'
 import BackButton from '../components/BackButton.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -11,6 +11,33 @@ function formatTime(iso) {
   return new Date(iso).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
 }
 
+// Downscales + re-encodes as JPEG client-side so a 10MB phone photo doesn't
+// go over the wire (and the server's upload size limit) as-is.
+function compressImage(file, maxDim = 1600, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        let { width, height } = img
+        if (width > maxDim || height > maxDim) {
+          if (width > height) { height = Math.round(height * maxDim / width); width = maxDim }
+          else { width = Math.round(width * maxDim / height); height = maxDim }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.onerror = reject
+      img.src = reader.result
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 export default function EventChatScreen() {
   const { id } = useParams()
   const { user } = useAuth()
@@ -18,9 +45,11 @@ export default function EventChatScreen() {
   const [status, setStatus] = useState('pending') // pending | ok | error
   const [errorMsg, setErrorMsg] = useState(null)
   const [text, setText] = useState('')
+  const [imagePreview, setImagePreview] = useState(null)
   const [sending, setSending] = useState(false)
   const listRef = useRef(null)
   const socketRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     apiFetch(`/events/${id}/chat/messages`)
@@ -48,19 +77,34 @@ export default function EventChatScreen() {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
   }, [messages])
 
+  async function handlePickFile(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      setImagePreview(await compressImage(file))
+    } catch {
+      setErrorMsg('Не вдалося обробити фото')
+    }
+  }
+
   async function handleSend() {
     const trimmed = text.trim()
-    if (!trimmed || sending) return
+    if ((!trimmed && !imagePreview) || sending) return
     setSending(true)
+    const payloadText = trimmed
+    const payloadImage = imagePreview
     setText('')
+    setImagePreview(null)
     try {
       await apiFetch(`/events/${id}/chat/messages`, {
         method: 'POST',
-        body: JSON.stringify({ text: trimmed }),
+        body: JSON.stringify({ text: payloadText || null, image: payloadImage || undefined }),
       })
     } catch (err) {
       setErrorMsg(err.message)
-      setText(trimmed)
+      setText(payloadText)
+      setImagePreview(payloadImage)
     } finally {
       setSending(false)
     }
@@ -109,15 +153,26 @@ export default function EventChatScreen() {
                   background: mine ? 'var(--accent)' : 'var(--card)',
                   color: mine ? '#fff' : 'var(--text)',
                   borderRadius: 'var(--radius-md)',
-                  padding: '8px 12px',
+                  padding: m.image_url ? 6 : '8px 12px',
                   boxShadow: 'var(--shadow-sm)',
                 }}>
                   {!mine && (
-                    <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 2, color: 'var(--accent)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, margin: m.image_url ? '2px 4px 4px' : '0 0 2px', color: mine ? '#fff' : 'var(--accent)' }}>
                       {m.sender?.first_name ?? 'Користувач'}
                     </div>
                   )}
-                  <div style={{ fontSize: 14, lineHeight: 1.4, wordBreak: 'break-word' }}>{m.text}</div>
+                  {m.image_url && (
+                    <img
+                      src={m.image_url}
+                      alt=""
+                      style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 'var(--radius-sm)', display: 'block' }}
+                    />
+                  )}
+                  {m.text && (
+                    <div style={{ fontSize: 14, lineHeight: 1.4, wordBreak: 'break-word', padding: m.image_url ? '6px 4px 2px' : 0 }}>
+                      {m.text}
+                    </div>
+                  )}
                 </div>
                 <div style={{
                   fontSize: 10, color: 'var(--text-3)', marginTop: 2,
@@ -131,11 +186,40 @@ export default function EventChatScreen() {
         })}
       </div>
 
+      <div style={{ padding: '0 16px', flexShrink: 0 }}>
+        {imagePreview && (
+          <div style={{ position: 'relative', display: 'inline-block', marginBottom: 8 }}>
+            <img src={imagePreview} alt="" style={{ height: 64, borderRadius: 'var(--radius-sm)', display: 'block' }} />
+            <button
+              onClick={() => setImagePreview(null)}
+              style={{
+                position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: '50%',
+                background: 'var(--red)', color: '#fff', border: '2px solid var(--card)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+              }}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
+      </div>
+
       <div style={{
         display: 'flex', gap: 8, padding: '10px 16px',
         paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
         borderTop: '1px solid var(--border)', flexShrink: 0,
       }}>
+        <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handlePickFile} />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+            background: 'var(--card)', border: '1.5px solid var(--border)', color: 'var(--text)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+          }}
+        >
+          <Camera size={18} />
+        </button>
         <input
           type="text"
           placeholder="Написати повідомлення…"
@@ -146,8 +230,8 @@ export default function EventChatScreen() {
         />
         <button
           className="btn btn-primary"
-          style={{ padding: '0 16px', opacity: text.trim() && !sending ? 1 : .5 }}
-          disabled={!text.trim() || sending}
+          style={{ padding: '0 16px', opacity: (text.trim() || imagePreview) && !sending ? 1 : .5 }}
+          disabled={(!text.trim() && !imagePreview) || sending}
           onClick={handleSend}
         >
           <Send size={18} />

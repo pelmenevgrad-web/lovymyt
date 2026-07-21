@@ -21,7 +21,7 @@ const io = new Server(httpServer, {
 })
 
 app.use(cors())
-app.use(express.json())
+app.use(express.json({ limit: '8mb' }))
 
 // Supabase client (service role для серверного доступа)
 export const supabase = createClient(
@@ -737,7 +737,8 @@ async function getOrCreateChat(eventId) {
   return created.id
 }
 
-const CHAT_MESSAGE_SELECT = 'id, text, is_system, created_at, sender:users(id, first_name, avatar_url)'
+const CHAT_MESSAGE_SELECT = 'id, text, image_url, is_system, created_at, sender:users(id, first_name, avatar_url)'
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
 // Message history for an event's chat
 app.get('/events/:id/chat/messages', requireAuth, async (req, res) => {
@@ -770,23 +771,46 @@ app.post('/events/:id/chat/messages', requireAuth, async (req, res) => {
     return res.status(403).json({ error: 'Доступно тільки учасникам заходу' })
   }
 
-  const text = req.body?.text?.trim()
-  if (!text) {
+  const text = req.body?.text?.trim() || null
+  const imageDataUrl = req.body?.image
+
+  if (!text && !imageDataUrl) {
     return res.status(400).json({ error: 'Порожнє повідомлення' })
   }
 
   try {
+    let imageUrl = null
+    if (imageDataUrl) {
+      const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(imageDataUrl)
+      if (!match) {
+        return res.status(400).json({ error: 'Непідтримуваний формат зображення' })
+      }
+      const [, mime, base64Data] = match
+      const buffer = Buffer.from(base64Data, 'base64')
+      if (buffer.length > MAX_IMAGE_BYTES) {
+        return res.status(400).json({ error: 'Зображення завелике (макс. 8 МБ)' })
+      }
+
+      const ext = mime.split('/')[1]
+      const path = `${req.params.id}/${req.auth.sub}-${Date.now()}.${ext}`
+      const { error: uploadErr } = await supabase.storage.from('chat-images').upload(path, buffer, { contentType: mime })
+      if (uploadErr) throw uploadErr
+      imageUrl = supabase.storage.from('chat-images').getPublicUrl(path).data.publicUrl
+    }
+
     const chatId = await getOrCreateChat(req.params.id)
     const { data, error } = await supabase
       .from('chat_messages')
-      .insert({ chat_id: chatId, sender_id: req.auth.sub, text })
+      .insert({ chat_id: chatId, sender_id: req.auth.sub, text, image_url: imageUrl })
       .select(CHAT_MESSAGE_SELECT)
       .single()
 
     if (error) throw error
     io.to(`event:${req.params.id}`).emit('new_message', data)
 
-    const preview = data.text.length > 80 ? data.text.slice(0, 80) + '…' : data.text
+    const preview = data.text
+      ? (data.text.length > 80 ? data.text.slice(0, 80) + '…' : data.text)
+      : '📷 Фото'
     notifyEventPeople(
       req.params.id, req.auth.sub,
       (title) => `💬 ${data.sender?.first_name ?? 'Хтось'} у чаті «${title}»: ${preview}`,
