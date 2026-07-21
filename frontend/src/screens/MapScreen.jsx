@@ -29,25 +29,46 @@ const MARKER_ICON_PATHS = {
 // still be joined after they've started.
 const JOIN_BADGE_ICON = '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path>'
 
+// Small overlapping avatar row hanging below the pin, showing who's already
+// joined (up to 4). Falls back to an initial-letter circle without a photo.
+function markerAvatarsHtml(people) {
+  if (!people || people.length === 0) return ''
+  const size = 18
+  const items = people.slice(0, 4).map((p, i) => {
+    const marginLeft = i === 0 ? 0 : -6
+    if (p.avatar_url) {
+      return `<img src="${p.avatar_url}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:1.5px solid #fff;margin-left:${marginLeft}px;box-shadow:0 1px 3px rgba(0,0,0,.35);display:block;" />`
+    }
+    const initial = (p.first_name || '?')[0].toUpperCase()
+    const hue = p.first_name ? (p.first_name.charCodeAt(0) * 37) % 360 : 200
+    return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:hsl(${hue},60%,55%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;border:1.5px solid #fff;margin-left:${marginLeft}px;box-shadow:0 1px 3px rgba(0,0,0,.35);">${initial}</div>`
+  }).join('')
+  return `<div style="display:flex;">${items}</div>`
+}
+
 // Pin (teardrop) shape: a square rotated -45deg with 3 rounded corners.
 // The unrotated square's center never moves, so the icon overlay just
 // needs to sit centered on that same point (no counter-rotation needed).
 // `joinableNow` marks events the creator opted to allow joining after start —
 // shown as a small pulsing badge instead of a full halo around the pin.
-function createMarker(cat, isActive, joinableNow) {
-  const body = isActive ? 40 : 32
+function createMarker(cat, isActive, joinableNow, people) {
+  const body = isActive ? 48 : 40
   const height = Math.round(body * 1.45)
   const centerY = height / 2
   const tipY = Math.round(centerY + (body / 2) * Math.SQRT2)
-  const iconSize = isActive ? 20 : 16
+  const iconSize = isActive ? 24 : 20
   const half = body / 2
+
+  const hasAvatars = people && people.length > 0
+  const avatarRowTop = tipY + 4
+  const canvasHeight = hasAvatars ? avatarRowTop + 20 : height
 
   const iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${MARKER_ICON_PATHS[cat.id] ?? MARKER_ICON_PATHS[1]}</svg>`
 
   return L.divIcon({
     className: '',
     html: `
-      <div style="position:relative; width:${body}px; height:${height}px;">
+      <div style="position:relative; width:${body}px; height:${canvasHeight}px;">
         ${joinableNow ? `
           <div style="
             position:absolute; left:50%; top:${centerY}px; margin:-${half + 3}px 0 0 ${half - 7}px;
@@ -73,9 +94,12 @@ function createMarker(cat, isActive, joinableNow) {
           display:flex; align-items:center; justify-content:center;
           pointer-events:none;
         ">${iconSvg}</div>
+        <div style="position:absolute; left:50%; top:${avatarRowTop}px; transform:translateX(-50%); pointer-events:none;">
+          ${markerAvatarsHtml(people)}
+        </div>
       </div>
     `,
-    iconSize: [body, height],
+    iconSize: [body, canvasHeight],
     iconAnchor: [half, tipY],
   })
 }
@@ -182,7 +206,7 @@ export default function MapScreen() {
               <Marker
                 key={event.id}
                 position={[event.lat, event.lng]}
-                icon={createMarker(cat, isActive, joinableNow)}
+                icon={createMarker(cat, isActive, joinableNow, event.participant_avatars)}
                 eventHandlers={{ click: () => handleMarkerClick(event) }}
               />
             )
