@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import WebApp from '@twa-dev/sdk'
 import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Save, Zap, Plus, X, Loader2 } from 'lucide-react'
-import { CATEGORIES } from '../data/mockData.js'
+import { useCategories } from '../context/CategoriesContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import BackButton from '../components/BackButton.jsx'
 import LocationSearchPicker from '../components/LocationSearchPicker.jsx'
@@ -42,6 +42,7 @@ function Section({ title, children }) {
 
 export default function CreateScreen() {
   const navigate = useNavigate()
+  const { categories } = useCategories()
   const { id: eventId } = useParams()
   const isEdit = !!eventId
   const [loadingEvent, setLoadingEvent] = useState(isEdit)
@@ -221,7 +222,7 @@ export default function CreateScreen() {
       {/* Category */}
       <Section title="Категорія">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {CATEGORIES.filter(c => c.id !== 0).map(cat => {
+          {categories.filter(c => c.id !== 0).map(cat => {
             const active = form.category_id === cat.id
             return (
               <button

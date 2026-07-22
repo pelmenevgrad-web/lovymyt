@@ -4,7 +4,8 @@ import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
   Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX,
 } from 'lucide-react'
-import { CATEGORIES, STATUS_META } from '../data/mockData.js'
+import { STATUS_META } from '../data/mockData.js'
+import { useCategories } from '../context/CategoriesContext.jsx'
 import { Avatar, AvatarStack } from '../components/EventCard.jsx'
 import BackButton from '../components/BackButton.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -151,6 +152,7 @@ export default function EventDetailScreen() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { categories } = useCategories()
   const [event, setEvent] = useState(null)
   const [status, setStatus] = useState('pending') // pending | ok | error
   const [joining, setJoining] = useState(false)
@@ -254,7 +256,7 @@ export default function EventDetailScreen() {
     )
   }
 
-  const cat = CATEGORIES.find(c => c.id === event.category_id) ?? CATEGORIES[0]
+  const cat = categories.find(c => c.id === event.category_id) ?? categories[0]
   const statusMeta = STATUS_META[event.status] ?? STATUS_META.planned
   const budget = BUDGET_LABEL[event.budget_type] ?? BUDGET_LABEL.free
   const pct = Math.round((event.current_participants / event.max_participants) * 100)

@@ -15,7 +15,12 @@ import EventChatScreen from './screens/EventChatScreen.jsx'
 import EventReportScreen from './screens/EventReportScreen.jsx'
 import PublicProfileScreen from './screens/PublicProfileScreen.jsx'
 import EventHistoryScreen from './screens/EventHistoryScreen.jsx'
+import AdminScreen from './screens/AdminScreen.jsx'
+import AdminCategoriesScreen from './screens/AdminCategoriesScreen.jsx'
+import AdminFunnyStatusesScreen from './screens/AdminFunnyStatusesScreen.jsx'
+import AdminUsersScreen from './screens/AdminUsersScreen.jsx'
 import WelcomeScreen from './screens/WelcomeScreen.jsx'
+import { useAuth } from './context/AuthContext.jsx'
 
 // ── Visible init-debug overlay ───────────────────────────────────────────────
 // Rendered instead of the real app while initialization is in progress.
@@ -177,6 +182,10 @@ export default function App() {
         <Route path="/events/:id/report" element={<EventReportScreen />} />
         <Route path="/events/history" element={<EventHistoryScreen />} />
         <Route path="/users/:id" element={<PublicProfileScreen />} />
+        <Route path="/admin" element={<AdminOnly><AdminScreen /></AdminOnly>} />
+        <Route path="/admin/categories" element={<AdminOnly><AdminCategoriesScreen /></AdminOnly>} />
+        <Route path="/admin/funny-statuses" element={<AdminOnly><AdminFunnyStatusesScreen /></AdminOnly>} />
+        <Route path="/admin/users" element={<AdminOnly><AdminUsersScreen /></AdminOnly>} />
       </Routes>
     </MemoryRouter>
   )
@@ -189,4 +198,33 @@ function WithNav({ children }) {
       <BottomNav />
     </>
   )
+}
+
+// Blocks direct navigation to /admin/* for non-admin accounts (the nav link
+// to get here is itself hidden unless user.is_admin, but the route must
+// still refuse a manually-typed URL).
+function AdminOnly({ children }) {
+  const { user, status } = useAuth()
+
+  if (status === 'pending') {
+    return (
+      <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+        <Loader2 size={28} className="spin" color="var(--text-3)" />
+      </div>
+    )
+  }
+
+  if (!user?.is_admin) {
+    return (
+      <div className="page" style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 10, minHeight: '60vh', padding: '0 32px', textAlign: 'center',
+      }}>
+        <AlertTriangle size={28} color="var(--text-3)" />
+        <div style={{ fontWeight: 700, fontSize: 15 }}>Немає доступу</div>
+      </div>
+    )
+  }
+
+  return children
 }

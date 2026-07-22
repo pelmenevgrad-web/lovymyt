@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
+import { CategoriesProvider } from './context/CategoriesContext.jsx'
 
 const rootEl = document.getElementById('root')
 
@@ -18,7 +19,9 @@ try {
     <React.StrictMode>
       <ErrorBoundary>
         <AuthProvider>
-          <App />
+          <CategoriesProvider>
+            <App />
+          </CategoriesProvider>
         </AuthProvider>
       </ErrorBoundary>
     </React.StrictMode>,

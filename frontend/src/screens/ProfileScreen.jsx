@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History } from 'lucide-react'
+import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History, ShieldEllipsis } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/EventCard.jsx'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
 import { apiFetch } from '../lib/api.js'
-import { CATEGORIES } from '../data/mockData.js'
+import { useCategories } from '../context/CategoriesContext.jsx'
 import ReviewsList from '../components/ReviewsList.jsx'
 
 function shareApp() {
@@ -60,6 +60,7 @@ function CenteredMessage({ icon: Icon, title, text }) {
 export default function ProfileScreen() {
   const navigate = useNavigate()
   const { user, status, error } = useAuth()
+  const { categories } = useCategories()
   const [myEvents, setMyEvents] = useState(null)
 
   useEffect(() => {
@@ -191,6 +192,18 @@ export default function ProfileScreen() {
         </button>
       </div>
 
+      {user.is_admin && (
+        <div style={{ margin: '12px 16px 0' }}>
+          <button
+            className="btn btn-ghost"
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            onClick={() => navigate('/admin')}
+          >
+            <ShieldEllipsis size={16} /> Адмін-панель
+          </button>
+        </div>
+      )}
+
       {/* Stars balance */}
       <div style={{ margin: '12px 16px 0' }} className="card">
         <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -240,7 +253,7 @@ export default function ProfileScreen() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {myEvents.map(e => {
-              const cat = CATEGORIES.find(c => c.id === e.category_id)
+              const cat = categories.find(c => c.id === e.category_id)
               const CatIcon = cat?.Icon
               return (
                 <div

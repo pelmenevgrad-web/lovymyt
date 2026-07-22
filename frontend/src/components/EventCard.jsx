@@ -1,5 +1,6 @@
 import { BadgeCheck, Zap, Clock, MapPin } from 'lucide-react'
-import { CATEGORIES, STATUS_META } from '../data/mockData.js'
+import { STATUS_META } from '../data/mockData.js'
+import { useCategories } from '../context/CategoriesContext.jsx'
 import { formatCountdown } from '../lib/format.js'
 
 function Avatar({ name, url, size = 36 }) {
@@ -40,7 +41,8 @@ export function AvatarStack({ people, size = 18 }) {
 }
 
 export default function EventCard({ event, onClick, compact = false }) {
-  const cat    = CATEGORIES.find(c => c.id === event.category_id) ?? CATEGORIES[0]
+  const { categories } = useCategories()
+  const cat    = categories.find(c => c.id === event.category_id) ?? categories[0]
   const status = STATUS_META[event.status] ?? STATUS_META.planned
   const pct    = Math.round((event.current_participants / event.max_participants) * 100)
 

@@ -5,14 +5,7 @@ import { Avatar } from '../components/EventCard.jsx'
 import BackButton from '../components/BackButton.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
-
-// Must match FUNNY_STATUSES in backend/src/index.js — anything else is
-// silently dropped server-side.
-const FUNNY_STATUSES = [
-  'Душа компанії', 'Найсмішніший', 'Король/королева танцполу',
-  'Найкраще пригостив(-ла)', 'Найпунктуальніший', 'Фотограф заходу',
-  'Найтихіший', 'Балакун',
-]
+import { resolveIcon } from '../lib/icons.js'
 
 function StarPicker({ value, onChange }) {
   return (
@@ -35,6 +28,7 @@ export default function EventReviewScreen() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const [people, setPeople] = useState(null)
+  const [funnyStatusOptions, setFunnyStatusOptions] = useState([])
   const [status, setStatus] = useState('pending') // pending | ok | error
   const [ratings, setRatings] = useState({})
   const [comments, setComments] = useState({})
@@ -50,6 +44,9 @@ export default function EventReviewScreen() {
         setStatus('ok')
       })
       .catch(() => setStatus('error'))
+    apiFetch('/funny-statuses')
+      .then(({ funny_statuses }) => setFunnyStatusOptions(funny_statuses))
+      .catch(err => console.error('[Review] failed to load funny statuses:', err.message))
   }, [id, user?.id])
 
   async function handleSubmit() {
@@ -139,20 +136,22 @@ export default function EventReviewScreen() {
                 onChange={v => setRatings(r => ({ ...r, [person.id]: v }))}
               />
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-                {FUNNY_STATUSES.map(label => {
+                {funnyStatusOptions.map(({ id: statusId, label, icon_name }) => {
                   const selected = funnyStatuses[person.id] === label
+                  const StatusIcon = resolveIcon(icon_name)
                   return (
                     <button
-                      key={label}
+                      key={statusId}
                       onClick={() => setFunnyStatuses(f => ({ ...f, [person.id]: selected ? undefined : label }))}
                       className="chip"
                       style={{
                         background: selected ? 'var(--accent)' : 'var(--card)',
                         color: selected ? '#fff' : 'var(--text-2)',
                         border: '1.5px solid ' + (selected ? 'var(--accent)' : 'var(--border)'),
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
                       }}
                     >
-                      {label}
+                      <StatusIcon size={13} /> {label}
                     </button>
                   )
                 })}

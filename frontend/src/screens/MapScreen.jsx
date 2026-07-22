@@ -7,23 +7,11 @@ import { LocateFixed, Loader2 } from 'lucide-react'
 import CategoryChips from '../components/CategoryChips.jsx'
 import EventCard from '../components/EventCard.jsx'
 import { apiFetch } from '../lib/api.js'
-import { CATEGORIES } from '../data/mockData.js'
+import { useCategories } from '../context/CategoriesContext.jsx'
+import { MARKER_ICON_PATHS } from '../lib/markerIcons.js'
 
 // Kyiv center as default
 const DEFAULT_CENTER = [50.4501, 30.5234]
-
-// Inner <path>/<circle> markup for each category's lucide icon (viewBox 0 0 24 24),
-// extracted ahead of time so map markers don't need to pull react-dom/server into
-// the client bundle just to stringify a handful of static icons.
-const MARKER_ICON_PATHS = {
-  0: '<path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4"></path>',
-  1: '<path d="M11 7a16 16 20 0 1 10.98 4.362"></path><path d="M12 12a13 13 0 0 1-8.66 5"></path><path d="M16.83 13.634a16 16 0 0 1-9.267 7.328"></path><path d="M20.66 17A13 13 0 0 0 12 12a13 13 0 0 1 0-10"></path><path d="M8.17 15.366a16 16 0 0 1-1.713-11.69"></path><circle cx="12" cy="12" r="10"></circle>',
-  2: '<path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"></path><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"></path><path d="M16 17h4"></path><path d="M4 13h4"></path>',
-  3: '<rect width="12" height="12" x="2" y="10" rx="2" ry="2"></rect><path d="m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6"></path><path d="M6 18h.01"></path><path d="M10 14h.01"></path><path d="M15 6h.01"></path><path d="M18 9h.01"></path>',
-  4: '<path d="m16 2-2.3 2.3a3 3 0 0 0 0 4.2l1.8 1.8a3 3 0 0 0 4.2 0L22 8"></path><path d="M15 15 3.3 3.3a4.2 4.2 0 0 0 0 6l7.3 7.3c.7.7 2 .7 2.8 0L15 15Zm0 0 7 7"></path><path d="m2.1 21.8 6.4-6.3"></path><path d="m19 5-7 7"></path>',
-  5: '<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>',
-  6: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"></path>',
-}
 
 // Lightning-bolt badge path (lucide "Zap"), used to mark events that can
 // still be joined after they've started.
@@ -63,7 +51,7 @@ function createMarker(cat, isActive, joinableNow, people) {
   const avatarRowTop = tipY + 4
   const canvasHeight = hasAvatars ? avatarRowTop + 20 : height
 
-  const iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${MARKER_ICON_PATHS[cat.id] ?? MARKER_ICON_PATHS[1]}</svg>`
+  const iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${MARKER_ICON_PATHS[cat.icon_name] ?? MARKER_ICON_PATHS.Sparkles}</svg>`
 
   return L.divIcon({
     className: '',
@@ -132,6 +120,7 @@ function LocateButton({ onLocate }) {
 export default function MapScreen() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { categories: CATEGORIES } = useCategories()
   const [selectedCat, setSelectedCat] = useState(() => location.state?.categoryId ?? 0)
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [isDark, setIsDark] = useState(

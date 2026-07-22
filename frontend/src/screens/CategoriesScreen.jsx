@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Trophy } from 'lucide-react'
-import { CATEGORIES } from '../data/mockData.js'
+import { useCategories } from '../context/CategoriesContext.jsx'
 import { apiFetch } from '../lib/api.js'
 
 export default function CategoriesScreen() {
   const navigate = useNavigate()
+  const { categories } = useCategories()
   const [events, setEvents] = useState([])
 
   useEffect(() => {
@@ -47,7 +48,7 @@ export default function CategoriesScreen() {
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12,
       }}>
-        {CATEGORIES.map(cat => {
+        {categories.map(cat => {
           const count = countFor(cat.id)
           return (
             <div

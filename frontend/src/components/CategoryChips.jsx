@@ -1,6 +1,4 @@
-import { CATEGORIES } from '../data/mockData.js'
-
-export default function CategoryChips({ categories = CATEGORIES, selected, onChange }) {
+export default function CategoryChips({ categories, selected, onChange }) {
   return (
     <div style={{
       display: 'flex', gap: 8, overflowX: 'auto', padding: '0 16px',

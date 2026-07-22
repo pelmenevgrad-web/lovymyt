@@ -176,6 +176,10 @@ app.post('/auth/telegram', async (req, res) => {
     return res.status(500).json({ error: 'Failed to persist user' })
   }
 
+  if (user.is_banned) {
+    return res.status(403).json({ error: `Тебе заблоковано.${user.ban_reason ? ` Причина: ${user.ban_reason}` : ''}` })
+  }
+
   const token = jwt.sign({ sub: user.id, telegram_id: user.telegram_id }, JWT_SECRET, { expiresIn: '30d' })
   res.json({ token, user: { ...user, ...(await computeUserStats(user.id)) } })
 })
@@ -208,6 +212,18 @@ function tryAuth(req) {
   } catch {
     return null
   }
+}
+
+// Same as requireAuth, but also requires the user to be flagged is_admin —
+// used to gate every /admin/* route below.
+async function requireAdmin(req, res, next) {
+  requireAuth(req, res, async () => {
+    const { data: user } = await supabase.from('users').select('is_admin').eq('id', req.auth.sub).single()
+    if (!user?.is_admin) {
+      return res.status(403).json({ error: 'Admin only' })
+    }
+    next()
+  })
 }
 
 // Update the authenticated user's own editable profile fields
@@ -268,6 +284,36 @@ app.get('/users/:id', async (req, res) => {
   }
 
   res.json({ user: { ...user, ...(await computeUserStats(user.id)) } })
+})
+
+// Public list of event categories — icon_name is a lucide-react component name
+app.get('/categories', async (_req, res) => {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id, name, icon_name, color')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+
+  if (error) {
+    console.error('Fetching categories failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load categories' })
+  }
+  res.json({ categories: data })
+})
+
+// Public list of the funny-status labels reviewers can tag participants with
+app.get('/funny-statuses', async (_req, res) => {
+  const { data, error } = await supabase
+    .from('funny_statuses')
+    .select('id, label, icon_name')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+
+  if (error) {
+    console.error('Fetching funny statuses failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load funny statuses' })
+  }
+  res.json({ funny_statuses: data })
 })
 
 const EVENT_SELECT = '*, creator:users(first_name, avatar_url), participants:event_participants(status, user:users(id, first_name, avatar_url))'
@@ -747,14 +793,6 @@ app.post('/events/:id/participants/:userId/decline', requireAuth, async (req, re
   res.json({ ok: true })
 })
 
-// Fixed set of light-hearted post-event superlatives — kept as plain text
-// (not a DB enum) so the list can grow without another migration.
-const FUNNY_STATUSES = [
-  'Душа компанії', 'Найсмішніший', 'Король/королева танцполу',
-  'Найкраще пригостив(-ла)', 'Найпунктуальніший', 'Фотограф заходу',
-  'Найтихіший', 'Балакун',
-]
-
 // Submit ratings/comments for other people who were at the same event.
 // Upserts so re-submitting just edits the earlier review instead of erroring.
 app.post('/events/:id/reviews', requireAuth, async (req, res) => {
@@ -762,6 +800,9 @@ app.post('/events/:id/reviews', requireAuth, async (req, res) => {
   if (!Array.isArray(reviews) || reviews.length === 0) {
     return res.status(400).json({ error: 'reviews must be a non-empty array' })
   }
+
+  const { data: validStatuses } = await supabase.from('funny_statuses').select('label').eq('is_active', true)
+  const validLabels = new Set((validStatuses ?? []).map(s => s.label))
 
   const rows = reviews
     .filter(r => r.to_user_id && r.to_user_id !== req.auth.sub && Number(r.rating) >= 1 && Number(r.rating) <= 5)
@@ -771,7 +812,7 @@ app.post('/events/:id/reviews', requireAuth, async (req, res) => {
       to_user_id: r.to_user_id,
       rating: Number(r.rating),
       comment: r.comment?.trim() || null,
-      funny_status: FUNNY_STATUSES.includes(r.funny_status) ? r.funny_status : null,
+      funny_status: validLabels.has(r.funny_status) ? r.funny_status : null,
     }))
 
   if (rows.length === 0) {
@@ -1129,6 +1170,155 @@ app.post('/events/:id/reports/:reportId/hide', requireAuth, async (req, res) => 
     return res.status(500).json({ error: 'Failed to hide report' })
   }
   res.json({ ok: true })
+})
+
+// ── Admin ────────────────────────────────────────────────────────────────
+
+app.get('/admin/stats', requireAdmin, async (_req, res) => {
+  const count = (table, filters = (q) => q) =>
+    filters(supabase.from(table).select('id', { count: 'exact', head: true })).then(({ count }) => count ?? 0)
+
+  const [
+    total_users, banned_users, total_events, planned_events, gathering_events,
+    active_events, completed_events, cancelled_events, total_reports, total_reviews,
+  ] = await Promise.all([
+    count('users'),
+    count('users', (q) => q.eq('is_banned', true)),
+    count('events'),
+    count('events', (q) => q.eq('status', 'planned')),
+    count('events', (q) => q.eq('status', 'gathering')),
+    count('events', (q) => q.eq('status', 'active')),
+    count('events', (q) => q.eq('status', 'completed')),
+    count('events', (q) => q.eq('status', 'cancelled')),
+    count('event_reports'),
+    count('reviews'),
+  ])
+
+  res.json({
+    total_users, banned_users, total_events,
+    events_by_status: { planned: planned_events, gathering: gathering_events, active: active_events, completed: completed_events, cancelled: cancelled_events },
+    total_reports, total_reviews,
+  })
+})
+
+app.get('/admin/categories', requireAdmin, async (_req, res) => {
+  const { data, error } = await supabase.from('categories').select('*').order('sort_order', { ascending: true })
+  if (error) return res.status(500).json({ error: 'Failed to load categories' })
+  res.json({ categories: data })
+})
+
+app.post('/admin/categories', requireAdmin, async (req, res) => {
+  const { name, icon_name, color, sort_order } = req.body ?? {}
+  if (!name?.trim()) {
+    return res.status(400).json({ error: 'name is required' })
+  }
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({ name: name.trim(), icon_name: icon_name || null, color: color || null, sort_order: sort_order || 0 })
+    .select()
+    .single()
+  if (error) {
+    console.error('Creating category failed:', error.message)
+    return res.status(500).json({ error: 'Failed to create category' })
+  }
+  res.status(201).json({ category: data })
+})
+
+app.patch('/admin/categories/:id', requireAdmin, async (req, res) => {
+  const { name, icon_name, color, sort_order, is_active } = req.body ?? {}
+  const patch = {}
+  if (name !== undefined) patch.name = name.trim()
+  if (icon_name !== undefined) patch.icon_name = icon_name
+  if (color !== undefined) patch.color = color
+  if (sort_order !== undefined) patch.sort_order = sort_order
+  if (is_active !== undefined) patch.is_active = !!is_active
+
+  const { data, error } = await supabase.from('categories').update(patch).eq('id', req.params.id).select().single()
+  if (error) {
+    console.error('Updating category failed:', error.message)
+    return res.status(500).json({ error: 'Failed to update category' })
+  }
+  res.json({ category: data })
+})
+
+app.get('/admin/funny-statuses', requireAdmin, async (_req, res) => {
+  const { data, error } = await supabase.from('funny_statuses').select('*').order('sort_order', { ascending: true })
+  if (error) return res.status(500).json({ error: 'Failed to load funny statuses' })
+  res.json({ funny_statuses: data })
+})
+
+app.post('/admin/funny-statuses', requireAdmin, async (req, res) => {
+  const { label, icon_name, sort_order } = req.body ?? {}
+  if (!label?.trim()) {
+    return res.status(400).json({ error: 'label is required' })
+  }
+  const { data, error } = await supabase
+    .from('funny_statuses')
+    .insert({ label: label.trim(), icon_name: icon_name || null, sort_order: sort_order || 0 })
+    .select()
+    .single()
+  if (error) {
+    console.error('Creating funny status failed:', error.message)
+    return res.status(500).json({ error: 'Failed to create funny status' })
+  }
+  res.status(201).json({ funny_status: data })
+})
+
+app.patch('/admin/funny-statuses/:id', requireAdmin, async (req, res) => {
+  const { label, icon_name, sort_order, is_active } = req.body ?? {}
+  const patch = {}
+  if (label !== undefined) patch.label = label.trim()
+  if (icon_name !== undefined) patch.icon_name = icon_name
+  if (sort_order !== undefined) patch.sort_order = sort_order
+  if (is_active !== undefined) patch.is_active = !!is_active
+
+  const { data, error } = await supabase.from('funny_statuses').update(patch).eq('id', req.params.id).select().single()
+  if (error) {
+    console.error('Updating funny status failed:', error.message)
+    return res.status(500).json({ error: 'Failed to update funny status' })
+  }
+  res.json({ funny_status: data })
+})
+
+app.get('/admin/users', requireAdmin, async (_req, res) => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, telegram_id, username, first_name, avatar_url, is_admin, is_banned, ban_reason, created_at')
+    .order('created_at', { ascending: false })
+  if (error) return res.status(500).json({ error: 'Failed to load users' })
+  res.json({ users: data })
+})
+
+app.post('/admin/users/:id/ban', requireAdmin, async (req, res) => {
+  const reason = req.body?.reason?.trim()
+  if (!reason) {
+    return res.status(400).json({ error: 'Опиши причину бану' })
+  }
+  const { data, error } = await supabase
+    .from('users')
+    .update({ is_banned: true, ban_reason: reason })
+    .eq('id', req.params.id)
+    .select('id, first_name, is_banned, ban_reason')
+    .single()
+  if (error) {
+    console.error('Banning user failed:', error.message)
+    return res.status(500).json({ error: 'Failed to ban user' })
+  }
+  res.json({ user: data })
+})
+
+app.post('/admin/users/:id/unban', requireAdmin, async (req, res) => {
+  const { data, error } = await supabase
+    .from('users')
+    .update({ is_banned: false, ban_reason: null })
+    .eq('id', req.params.id)
+    .select('id, first_name, is_banned, ban_reason')
+    .single()
+  if (error) {
+    console.error('Unbanning user failed:', error.message)
+    return res.status(500).json({ error: 'Failed to unban user' })
+  }
+  res.json({ user: data })
 })
 
 // Socket.io: realtime delivery only — sending goes through the REST endpoint

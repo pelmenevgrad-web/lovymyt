@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Star, Loader2, AlertTriangle } from 'lucide-react'
-import { CATEGORIES } from '../data/mockData.js'
+import { useCategories } from '../context/CategoriesContext.jsx'
 import { Avatar } from '../components/EventCard.jsx'
 import BackButton from '../components/BackButton.jsx'
 import { apiFetch } from '../lib/api.js'
@@ -23,6 +23,7 @@ function Stars({ rating }) {
 
 export default function EventHistoryScreen() {
   const navigate = useNavigate()
+  const { categories } = useCategories()
   const [events, setEvents] = useState(null)
   const [status, setStatus] = useState('pending') // pending | ok | error
 
@@ -62,7 +63,7 @@ export default function EventHistoryScreen() {
         {status === 'ok' && events.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {events.map((e, i) => {
-              const cat = CATEGORIES.find(c => c.id === e.category_id) ?? CATEGORIES[0]
+              const cat = categories.find(c => c.id === e.category_id) ?? categories[0]
               return (
                 <div key={e.id} className="card" style={{ padding: '12px 14px', cursor: 'pointer' }} onClick={() => navigate(`/events/${e.id}`)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>

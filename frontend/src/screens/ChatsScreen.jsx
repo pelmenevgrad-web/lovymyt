@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
-import { CATEGORIES } from '../data/mockData.js'
+import { useCategories } from '../context/CategoriesContext.jsx'
 import { apiFetch } from '../lib/api.js'
 
 function formatChatTime(iso) {
@@ -13,7 +13,8 @@ function formatChatTime(iso) {
 }
 
 function ChatItem({ chat, onClick }) {
-  const cat = CATEGORIES.find(c => c.id === chat.category_id)
+  const { categories } = useCategories()
+  const cat = categories.find(c => c.id === chat.category_id)
   const CatIcon = cat?.Icon
 
   return (
