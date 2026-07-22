@@ -15,6 +15,7 @@ import EventChatScreen from './screens/EventChatScreen.jsx'
 import EventReportScreen from './screens/EventReportScreen.jsx'
 import PublicProfileScreen from './screens/PublicProfileScreen.jsx'
 import EventHistoryScreen from './screens/EventHistoryScreen.jsx'
+import UserArchiveScreen from './screens/UserArchiveScreen.jsx'
 import AdminScreen from './screens/AdminScreen.jsx'
 import AdminCategoriesScreen from './screens/AdminCategoriesScreen.jsx'
 import AdminFunnyStatusesScreen from './screens/AdminFunnyStatusesScreen.jsx'
@@ -182,6 +183,7 @@ export default function App() {
         <Route path="/events/:id/report" element={<EventReportScreen />} />
         <Route path="/events/history" element={<EventHistoryScreen />} />
         <Route path="/users/:id" element={<PublicProfileScreen />} />
+        <Route path="/users/:id/archive" element={<UserArchiveScreen />} />
         <Route path="/admin" element={<AdminOnly><AdminScreen /></AdminOnly>} />
         <Route path="/admin/categories" element={<AdminOnly><AdminCategoriesScreen /></AdminOnly>} />
         <Route path="/admin/funny-statuses" element={<AdminOnly><AdminFunnyStatusesScreen /></AdminOnly>} />

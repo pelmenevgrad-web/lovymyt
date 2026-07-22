@@ -31,13 +31,16 @@ function Stars({ rating }) {
   )
 }
 
-function StatBlock({ value, label }) {
+function StatBlock({ value, label, onClick }) {
   return (
-    <div style={{
-      flex: 1, textAlign: 'center', padding: '14px 8px',
-      background: 'var(--card)', borderRadius: 'var(--radius-md)',
-      boxShadow: 'var(--shadow-sm)',
-    }}>
+    <div
+      onClick={onClick}
+      style={{
+        flex: 1, textAlign: 'center', padding: '14px 8px',
+        background: 'var(--card)', borderRadius: 'var(--radius-md)',
+        boxShadow: 'var(--shadow-sm)', cursor: onClick ? 'pointer' : 'default',
+      }}
+    >
       <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--accent)' }}>{value}</div>
       <div style={{ fontSize: 11, color: 'var(--text-2)', fontWeight: 500, marginTop: 2 }}>{label}</div>
     </div>
@@ -160,7 +163,7 @@ export default function ProfileScreen() {
         <div style={{ display: 'flex', gap: 8 }}>
           <StatBlock value={user.events_created_count} label="Організував" />
           <StatBlock value={user.events_joined_count} label="Взяв участь" />
-          <StatBlock value={reliability} label="Надійність" />
+          <StatBlock value={reliability} label="Надійність" onClick={() => navigate(`/users/${user.id}/archive`)} />
         </div>
       </div>
 

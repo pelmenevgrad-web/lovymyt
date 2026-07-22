@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Star, Loader2, AlertTriangle, Check } from 'lucide-react'
+import { Star, Loader2, AlertTriangle, Check, UserX } from 'lucide-react'
 import { Avatar } from '../components/EventCard.jsx'
 import BackButton from '../components/BackButton.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -27,17 +27,22 @@ export default function EventReviewScreen() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const [event, setEvent] = useState(null)
   const [people, setPeople] = useState(null)
   const [funnyStatusOptions, setFunnyStatusOptions] = useState([])
   const [status, setStatus] = useState('pending') // pending | ok | error
   const [ratings, setRatings] = useState({})
   const [comments, setComments] = useState({})
   const [funnyStatuses, setFunnyStatuses] = useState({})
+  const [noShows, setNoShows] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const [done, setDone] = useState(false)
 
   useEffect(() => {
+    apiFetch(`/events/${id}`)
+      .then(({ event }) => setEvent(event))
+      .catch(err => console.error('[Review] failed to load event:', err.message))
     apiFetch(`/events/${id}/participants`)
       .then(({ participants }) => {
         setPeople(participants.filter(p => p.id !== user?.id))
@@ -55,8 +60,9 @@ export default function EventReviewScreen() {
       .map(([to_user_id, rating]) => ({
         to_user_id, rating, comment: comments[to_user_id], funny_status: funnyStatuses[to_user_id],
       }))
+    const noShowIds = Object.entries(noShows).filter(([, marked]) => marked).map(([userId]) => userId)
 
-    if (reviews.length === 0) {
+    if (reviews.length === 0 && noShowIds.length === 0) {
       setSubmitError('Постав хоча б одну оцінку')
       return
     }
@@ -64,10 +70,18 @@ export default function EventReviewScreen() {
     setSubmitting(true)
     setSubmitError(null)
     try {
-      await apiFetch(`/events/${id}/reviews`, {
-        method: 'POST',
-        body: JSON.stringify({ reviews }),
-      })
+      if (reviews.length > 0) {
+        await apiFetch(`/events/${id}/reviews`, {
+          method: 'POST',
+          body: JSON.stringify({ reviews }),
+        })
+      }
+      if (event?.is_creator) {
+        await apiFetch(`/events/${id}/no-shows`, {
+          method: 'POST',
+          body: JSON.stringify({ user_ids: noShowIds }),
+        })
+      }
       setDone(true)
     } catch (err) {
       setSubmitError(err.message)
@@ -125,46 +139,68 @@ export default function EventReviewScreen() {
         </div>
       ) : (
         <div style={{ padding: '8px 16px' }}>
-          {people.map(person => (
-            <div key={person.id} className="card" style={{ padding: '14px', marginBottom: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                <Avatar name={person.first_name} url={person.avatar_url} size={36} />
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{person.first_name}</span>
-              </div>
-              <StarPicker
-                value={ratings[person.id] ?? 0}
-                onChange={v => setRatings(r => ({ ...r, [person.id]: v }))}
-              />
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-                {funnyStatusOptions.map(({ id: statusId, label, icon_name }) => {
-                  const selected = funnyStatuses[person.id] === label
-                  const StatusIcon = resolveIcon(icon_name)
-                  return (
+          {people.map(person => {
+            const isNoShow = !!noShows[person.id]
+            return (
+              <div key={person.id} className="card" style={{ padding: '14px', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <Avatar name={person.first_name} url={person.avatar_url} size={36} />
+                  <span style={{ flex: 1, fontWeight: 700, fontSize: 14 }}>{person.first_name}</span>
+                  {event?.is_creator && (
                     <button
-                      key={statusId}
-                      onClick={() => setFunnyStatuses(f => ({ ...f, [person.id]: selected ? undefined : label }))}
+                      onClick={() => setNoShows(n => ({ ...n, [person.id]: !n[person.id] }))}
                       className="chip"
                       style={{
-                        background: selected ? 'var(--accent)' : 'var(--card)',
-                        color: selected ? '#fff' : 'var(--text-2)',
-                        border: '1.5px solid ' + (selected ? 'var(--accent)' : 'var(--border)'),
-                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        background: isNoShow ? 'var(--red)' : 'var(--card)',
+                        color: isNoShow ? '#fff' : 'var(--text-2)',
+                        border: '1.5px solid ' + (isNoShow ? 'var(--red)' : 'var(--border)'),
+                        display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0,
                       }}
                     >
-                      <StatusIcon size={13} /> {label}
+                      <UserX size={13} /> Не з'явився
                     </button>
-                  )
-                })}
+                  )}
+                </div>
+
+                {!isNoShow && (
+                  <>
+                    <StarPicker
+                      value={ratings[person.id] ?? 0}
+                      onChange={v => setRatings(r => ({ ...r, [person.id]: v }))}
+                    />
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                      {funnyStatusOptions.map(({ id: statusId, label, icon_name }) => {
+                        const selected = funnyStatuses[person.id] === label
+                        const StatusIcon = resolveIcon(icon_name)
+                        return (
+                          <button
+                            key={statusId}
+                            onClick={() => setFunnyStatuses(f => ({ ...f, [person.id]: selected ? undefined : label }))}
+                            className="chip"
+                            style={{
+                              background: selected ? 'var(--accent)' : 'var(--card)',
+                              color: selected ? '#fff' : 'var(--text-2)',
+                              border: '1.5px solid ' + (selected ? 'var(--accent)' : 'var(--border)'),
+                              display: 'inline-flex', alignItems: 'center', gap: 5,
+                            }}
+                          >
+                            <StatusIcon size={13} /> {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <textarea
+                      placeholder="Коментар (необов'язково)"
+                      rows={2}
+                      value={comments[person.id] ?? ''}
+                      onChange={e => setComments(c => ({ ...c, [person.id]: e.target.value }))}
+                      style={{ resize: 'none', marginTop: 10 }}
+                    />
+                  </>
+                )}
               </div>
-              <textarea
-                placeholder="Коментар (необов'язково)"
-                rows={2}
-                value={comments[person.id] ?? ''}
-                onChange={e => setComments(c => ({ ...c, [person.id]: e.target.value }))}
-                style={{ resize: 'none', marginTop: 10 }}
-              />
-            </div>
-          ))}
+            )
+          })}
 
           {submitError && (
             <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 8, textAlign: 'center' }}>{submitError}</div>

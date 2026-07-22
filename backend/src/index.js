@@ -141,9 +141,15 @@ async function computeUserStats(userId) {
     .eq('status', 'accepted')
     .eq('events.status', 'completed')
 
+  const { count: noShowCount } = await supabase
+    .from('event_no_shows')
+    .select('event_id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+
   return {
     events_created_count: createdCount ?? 0,
     events_joined_count: joinedRows?.length ?? 0,
+    no_show_count: noShowCount ?? 0,
   }
 }
 
@@ -831,6 +837,46 @@ app.post('/events/:id/reviews', requireAuth, async (req, res) => {
   res.status(201).json({ ok: true })
 })
 
+// Organizer sets the no-show list for a completed event — resubmitting from
+// the review screen replaces the whole set rather than accumulating duplicates.
+app.post('/events/:id/no-shows', requireAuth, async (req, res) => {
+  const { data: event, error: eventErr } = await supabase
+    .from('events')
+    .select('creator_id, status')
+    .eq('id', req.params.id)
+    .single()
+
+  if (eventErr) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  if (event.creator_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки організатор може відмічати неявку' })
+  }
+  if (event.status !== 'completed') {
+    return res.status(400).json({ error: 'Захід ще не завершено' })
+  }
+
+  const userIds = Array.isArray(req.body?.user_ids) ? req.body.user_ids.filter(Boolean) : []
+
+  const { error: deleteErr } = await supabase.from('event_no_shows').delete().eq('event_id', req.params.id)
+  if (deleteErr) {
+    console.error('Clearing no-shows failed:', deleteErr.message)
+    return res.status(500).json({ error: 'Failed to update no-shows' })
+  }
+
+  if (userIds.length > 0) {
+    const { error: insertErr } = await supabase
+      .from('event_no_shows')
+      .insert(userIds.map(userId => ({ event_id: req.params.id, user_id: userId, marked_by: req.auth.sub })))
+    if (insertErr) {
+      console.error('Setting no-shows failed:', insertErr.message)
+      return res.status(500).json({ error: 'Failed to update no-shows' })
+    }
+  }
+
+  res.json({ ok: true })
+})
+
 // Public list of reviews someone has received — shown on their profile
 app.get('/users/:id/reviews', async (req, res) => {
   const { data, error } = await supabase
@@ -845,6 +891,43 @@ app.get('/users/:id/reviews', async (req, res) => {
   }
 
   res.json({ reviews: data })
+})
+
+// Public archive of completed events someone attended (organizer or accepted
+// participant) — the "Надійність" drill-down on their profile.
+app.get('/users/:id/events', async (req, res) => {
+  const { data: joinedRows, error: joinedErr } = await supabase
+    .from('event_participants')
+    .select('event_id')
+    .eq('user_id', req.params.id)
+    .eq('status', 'accepted')
+
+  if (joinedErr) {
+    console.error('Fetching joined event ids failed:', joinedErr.message)
+    return res.status(500).json({ error: 'Failed to load events' })
+  }
+
+  const joinedIds = joinedRows.map(r => r.event_id)
+  let query = supabase
+    .from('events')
+    .select(EVENT_SELECT)
+    .eq('status', 'completed')
+    .order('start_time', { ascending: false })
+
+  query = joinedIds.length > 0
+    ? query.or(`creator_id.eq.${req.params.id},id.in.(${joinedIds.join(',')})`)
+    : query.eq('creator_id', req.params.id)
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error('Fetching user event archive failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load events' })
+  }
+
+  res.json({
+    events: data.map(row => ({ ...shapeEvent(row), is_creator: row.creator_id === req.params.id })),
+  })
 })
 
 const SUPPLY_SELECT = '*, claims:event_supply_claims(amount, user:users(id, first_name, avatar_url))'

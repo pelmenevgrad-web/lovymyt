@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { Star, BadgeCheck, Loader2, AlertTriangle } from 'lucide-react'
 import { Avatar } from '../components/EventCard.jsx'
 import BackButton from '../components/BackButton.jsx'
@@ -22,13 +22,16 @@ function Stars({ rating }) {
   )
 }
 
-function StatBlock({ value, label }) {
+function StatBlock({ value, label, onClick }) {
   return (
-    <div style={{
-      flex: 1, textAlign: 'center', padding: '14px 8px',
-      background: 'var(--card)', borderRadius: 'var(--radius-md)',
-      boxShadow: 'var(--shadow-sm)',
-    }}>
+    <div
+      onClick={onClick}
+      style={{
+        flex: 1, textAlign: 'center', padding: '14px 8px',
+        background: 'var(--card)', borderRadius: 'var(--radius-md)',
+        boxShadow: 'var(--shadow-sm)', cursor: onClick ? 'pointer' : 'default',
+      }}
+    >
       <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--accent)' }}>{value}</div>
       <div style={{ fontSize: 11, color: 'var(--text-2)', fontWeight: 500, marginTop: 2 }}>{label}</div>
     </div>
@@ -37,6 +40,7 @@ function StatBlock({ value, label }) {
 
 export default function PublicProfileScreen() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [user, setUser] = useState(null)
   const [status, setStatus] = useState('pending') // pending | ok | error
 
@@ -114,6 +118,11 @@ export default function PublicProfileScreen() {
         <div style={{ display: 'flex', gap: 8 }}>
           <StatBlock value={user.events_created_count} label="Організував" />
           <StatBlock value={user.events_joined_count} label="Взяв участь" />
+          <StatBlock
+            value={user.events_joined_count > 0 ? `${Math.round((1 - user.no_show_count / user.events_joined_count) * 100)}%` : '—'}
+            label="Надійність"
+            onClick={() => navigate(`/users/${user.id}/archive`)}
+          />
         </div>
       </div>
 
