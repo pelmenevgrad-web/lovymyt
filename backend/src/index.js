@@ -124,6 +124,29 @@ app.post('/webhook', (req, res) => {
   bot.handleUpdate(req.body, res)
 })
 
+// events_created_count/events_joined_count on the users row were never kept
+// in sync by anything — computed live instead of trying to increment a
+// stored counter at every place an event can become 'completed'.
+async function computeUserStats(userId) {
+  const { count: createdCount } = await supabase
+    .from('events')
+    .select('id', { count: 'exact', head: true })
+    .eq('creator_id', userId)
+    .eq('status', 'completed')
+
+  const { data: joinedRows } = await supabase
+    .from('event_participants')
+    .select('event:events!inner(status)')
+    .eq('user_id', userId)
+    .eq('status', 'accepted')
+    .eq('events.status', 'completed')
+
+  return {
+    events_created_count: createdCount ?? 0,
+    events_joined_count: joinedRows?.length ?? 0,
+  }
+}
+
 // Telegram Mini App auth: verify initData signature, upsert the user, issue a JWT
 app.post('/auth/telegram', async (req, res) => {
   const { initData } = req.body ?? {}
@@ -154,7 +177,7 @@ app.post('/auth/telegram', async (req, res) => {
   }
 
   const token = jwt.sign({ sub: user.id, telegram_id: user.telegram_id }, JWT_SECRET, { expiresIn: '30d' })
-  res.json({ token, user })
+  res.json({ token, user: { ...user, ...(await computeUserStats(user.id)) } })
 })
 
 // Requires a valid `Authorization: Bearer <jwt>` issued by /auth/telegram
@@ -229,7 +252,22 @@ app.patch('/users/me', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to update profile' })
   }
 
-  res.json({ user })
+  res.json({ user: { ...user, ...(await computeUserStats(user.id)) } })
+})
+
+// Public profile — for viewing another user's page (e.g. an event's organizer)
+app.get('/users/:id', async (req, res) => {
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('id, first_name, avatar_url, bio, is_verified, is_pro, rating_avg, rating_count')
+    .eq('id', req.params.id)
+    .single()
+
+  if (error) {
+    return res.status(404).json({ error: 'User not found' })
+  }
+
+  res.json({ user: { ...user, ...(await computeUserStats(user.id)) } })
 })
 
 const EVENT_SELECT = '*, creator:users(first_name, avatar_url), participants:event_participants(status, user:users(id, first_name, avatar_url))'
@@ -255,6 +293,7 @@ function shapeEvent(row) {
     participant_avatars: accepted.slice(0, 4).map(p => ({
       id: p.user.id, first_name: p.user.first_name, avatar_url: p.user.avatar_url,
     })),
+    creator_id: row.creator_id,
     creator_name: row.creator?.first_name ?? 'Користувач',
     creator_avatar_url: row.creator?.avatar_url ?? null,
     budget_type: row.budget_type,
@@ -283,6 +322,49 @@ app.get('/events', async (_req, res) => {
   }
 
   res.json({ events: data.map(shapeEvent) })
+})
+
+// Past events, ranked by average rating (from reviews left about that event)
+app.get('/events/history', async (_req, res) => {
+  const { data, error } = await supabase
+    .from('events')
+    .select(EVENT_SELECT)
+    .eq('status', 'completed')
+    .order('start_time', { ascending: false })
+
+  if (error) {
+    console.error('Fetching event history failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load event history' })
+  }
+
+  const { data: reviews, error: reviewsError } = await supabase
+    .from('reviews')
+    .select('event_id, rating')
+    .in('event_id', data.map((row) => row.id))
+
+  if (reviewsError) {
+    console.error('Fetching event ratings failed:', reviewsError.message)
+    return res.status(500).json({ error: 'Failed to load event history' })
+  }
+
+  const ratingsByEvent = new Map()
+  for (const { event_id, rating } of reviews) {
+    const bucket = ratingsByEvent.get(event_id) ?? []
+    bucket.push(rating)
+    ratingsByEvent.set(event_id, bucket)
+  }
+
+  const events = data
+    .map((row) => {
+      const ratings = ratingsByEvent.get(row.id) ?? []
+      const rating_avg = ratings.length
+        ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 100) / 100
+        : null
+      return { ...shapeEvent(row), rating_avg, rating_count: ratings.length }
+    })
+    .sort((a, b) => (b.rating_avg ?? -1) - (a.rating_avg ?? -1))
+
+  res.json({ events })
 })
 
 // duration_max_hours becomes end_time (start_time + N hours) — the hard
@@ -795,6 +877,23 @@ async function getOrCreateChat(eventId) {
 const CHAT_MESSAGE_SELECT = 'id, text, image_url, is_system, created_at, sender:users(id, first_name, avatar_url)'
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
+class ImageUploadError extends Error {}
+
+// Shared by chat messages and event reports — both let a user attach one
+// photo as a base64 data URL, uploaded to Storage under `bucket`.
+async function uploadImageDataUrl(dataUrl, bucket, pathPrefix) {
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(dataUrl)
+  if (!match) throw new ImageUploadError('Непідтримуваний формат зображення')
+  const [, mime, base64Data] = match
+  const buffer = Buffer.from(base64Data, 'base64')
+  if (buffer.length > MAX_IMAGE_BYTES) throw new ImageUploadError('Зображення завелике (макс. 8 МБ)')
+  const ext = mime.split('/')[1]
+  const path = `${pathPrefix}-${Date.now()}.${ext}`
+  const { error } = await supabase.storage.from(bucket).upload(path, buffer, { contentType: mime })
+  if (error) throw error
+  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl
+}
+
 // Message history for an event's chat
 app.get('/events/:id/chat/messages', requireAuth, async (req, res) => {
   const allowed = await canAccessChat(req.params.id, req.auth.sub)
@@ -834,24 +933,9 @@ app.post('/events/:id/chat/messages', requireAuth, async (req, res) => {
   }
 
   try {
-    let imageUrl = null
-    if (imageDataUrl) {
-      const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(imageDataUrl)
-      if (!match) {
-        return res.status(400).json({ error: 'Непідтримуваний формат зображення' })
-      }
-      const [, mime, base64Data] = match
-      const buffer = Buffer.from(base64Data, 'base64')
-      if (buffer.length > MAX_IMAGE_BYTES) {
-        return res.status(400).json({ error: 'Зображення завелике (макс. 8 МБ)' })
-      }
-
-      const ext = mime.split('/')[1]
-      const path = `${req.params.id}/${req.auth.sub}-${Date.now()}.${ext}`
-      const { error: uploadErr } = await supabase.storage.from('chat-images').upload(path, buffer, { contentType: mime })
-      if (uploadErr) throw uploadErr
-      imageUrl = supabase.storage.from('chat-images').getPublicUrl(path).data.publicUrl
-    }
+    const imageUrl = imageDataUrl
+      ? await uploadImageDataUrl(imageDataUrl, 'chat-images', `${req.params.id}/${req.auth.sub}`)
+      : null
 
     const chatId = await getOrCreateChat(req.params.id)
     const { data, error } = await supabase
@@ -874,9 +958,104 @@ app.post('/events/:id/chat/messages', requireAuth, async (req, res) => {
 
     res.status(201).json({ message: data })
   } catch (err) {
+    if (err instanceof ImageUploadError) {
+      return res.status(400).json({ error: err.message })
+    }
     console.error('Sending chat message failed:', err.message)
     res.status(500).json({ error: 'Failed to send message' })
   }
+})
+
+const EVENT_REPORT_SELECT = 'id, text, image_url, created_at, author:users(id, first_name, avatar_url)'
+
+// Recap feed for a finished event — public read (anyone can browse a past
+// event's report), hidden entries excluded unless you're the organizer.
+app.get('/events/:id/reports', async (req, res) => {
+  const auth = tryAuth(req)
+  const { data: event } = await supabase.from('events').select('creator_id').eq('id', req.params.id).single()
+  if (!event) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  const isOrganizer = auth?.sub === event.creator_id
+
+  let query = supabase
+    .from('event_reports')
+    .select(`${EVENT_REPORT_SELECT}${isOrganizer ? ', is_hidden' : ''}`)
+    .eq('event_id', req.params.id)
+    .order('created_at', { ascending: true })
+  if (!isOrganizer) query = query.eq('is_hidden', false)
+
+  const { data, error } = await query
+  if (error) {
+    console.error('Fetching event reports failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load reports' })
+  }
+  res.json({ reports: data })
+})
+
+// Add a recap entry — only people who were actually there, once it's over
+app.post('/events/:id/reports', requireAuth, async (req, res) => {
+  const { data: event } = await supabase.from('events').select('status').eq('id', req.params.id).single()
+  if (!event) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  if (event.status !== 'completed') {
+    return res.status(400).json({ error: 'Звіт можна залишити тільки для завершеного заходу' })
+  }
+  const allowed = await canAccessChat(req.params.id, req.auth.sub)
+  if (!allowed) {
+    return res.status(403).json({ error: 'Тільки учасники заходу можуть залишити звіт' })
+  }
+
+  const text = req.body?.text?.trim() || null
+  const imageDataUrl = req.body?.image
+  if (!text && !imageDataUrl) {
+    return res.status(400).json({ error: 'Додай текст або фото' })
+  }
+
+  try {
+    const imageUrl = imageDataUrl
+      ? await uploadImageDataUrl(imageDataUrl, 'chat-images', `reports/${req.params.id}/${req.auth.sub}`)
+      : null
+
+    const { data, error } = await supabase
+      .from('event_reports')
+      .insert({ event_id: req.params.id, author_id: req.auth.sub, text, image_url: imageUrl })
+      .select(EVENT_REPORT_SELECT)
+      .single()
+
+    if (error) throw error
+    res.status(201).json({ report: data })
+  } catch (err) {
+    if (err instanceof ImageUploadError) {
+      return res.status(400).json({ error: err.message })
+    }
+    console.error('Adding event report failed:', err.message)
+    res.status(500).json({ error: 'Failed to add report' })
+  }
+})
+
+// Minimal moderation — the organizer can hide a report entry from their event
+app.post('/events/:id/reports/:reportId/hide', requireAuth, async (req, res) => {
+  const { data: event } = await supabase.from('events').select('creator_id').eq('id', req.params.id).single()
+  if (!event) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  if (event.creator_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки організатор може приховувати записи' })
+  }
+
+  const { error } = await supabase
+    .from('event_reports')
+    .update({ is_hidden: true })
+    .eq('id', req.params.reportId)
+    .eq('event_id', req.params.id)
+
+  if (error) {
+    console.error('Hiding report failed:', error.message)
+    return res.status(500).json({ error: 'Failed to hide report' })
+  }
+  res.json({ ok: true })
 })
 
 // Socket.io: realtime delivery only — sending goes through the REST endpoint
