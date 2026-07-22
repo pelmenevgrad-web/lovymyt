@@ -258,7 +258,10 @@ export default function EventDetailScreen() {
         </div>
 
         {/* Creator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, cursor: 'pointer' }}
+          onClick={() => navigate(`/users/${event.creator_id}`)}
+        >
           <Avatar name={event.creator_name} url={event.creator_avatar_url} size={28} />
           <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Організатор: <strong style={{ color: 'var(--text)' }}>{event.creator_name}</strong></span>
         </div>
@@ -412,6 +415,16 @@ export default function EventDetailScreen() {
             onClick={() => navigate(`/events/${id}/review`)}
           >
             Оцінити учасників
+          </button>
+        )}
+
+        {event.status === 'completed' && (
+          <button
+            className="btn btn-ghost"
+            style={{ width: '100%', marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            onClick={() => navigate(`/events/${id}/report`)}
+          >
+            <Flag size={16} /> Звіт заходу
           </button>
         )}
       </div>
