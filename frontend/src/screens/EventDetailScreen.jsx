@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
-  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag,
+  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX,
 } from 'lucide-react'
 import { CATEGORIES, STATUS_META } from '../data/mockData.js'
 import { Avatar, AvatarStack } from '../components/EventCard.jsx'
@@ -70,6 +70,62 @@ function SupplyItem({ supply, userId, onClaim }) {
   )
 }
 
+function ParticipantRow({ person, isCreator, canManage, onDecline }) {
+  const navigate = useNavigate()
+  const [declining, setDeclining] = useState(false)
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function submit() {
+    if (!reason.trim() || saving) return
+    setSaving(true)
+    await onDecline(person.id, reason.trim())
+    setSaving(false)
+    setDeclining(false)
+  }
+
+  return (
+    <div className="card" style={{ padding: 10, marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, cursor: 'pointer' }}
+          onClick={() => navigate(`/users/${person.id}`)}
+        >
+          <Avatar name={person.first_name} url={person.avatar_url} size={30} />
+          <span style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {person.first_name}
+          </span>
+          {isCreator && (
+            <span className="badge" style={{ background: 'var(--accent-light)', color: 'var(--accent)', flexShrink: 0 }}>Організатор</span>
+          )}
+        </div>
+        {canManage && !isCreator && (
+          <button
+            onClick={() => setDeclining(d => !d)}
+            style={{ background: 'none', border: 'none', color: 'var(--red)', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
+          >
+            <UserX size={14} /> Відмовити
+          </button>
+        )}
+      </div>
+      {declining && (
+        <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+          <input
+            autoFocus placeholder="Причина відмови" value={reason}
+            onChange={e => setReason(e.target.value)} style={{ flex: 1 }}
+          />
+          <button
+            className="btn" style={{ background: 'var(--red)', color: '#fff', padding: '8px 14px', fontSize: 13, opacity: saving ? .6 : 1 }}
+            disabled={saving || !reason.trim()} onClick={submit}
+          >
+            OK
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const BUDGET_LABEL = {
   free: { label: 'Безкоштовно', Icon: Gift },
   each_pays: { label: 'Кожен платить за себе', Icon: CreditCard },
@@ -100,6 +156,7 @@ export default function EventDetailScreen() {
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState(null)
   const [supplies, setSupplies] = useState([])
+  const [participants, setParticipants] = useState([])
   const [confirmingComplete, setConfirmingComplete] = useState(false)
   const [completing, setCompleting] = useState(false)
   const [completeError, setCompleteError] = useState(null)
@@ -118,7 +175,23 @@ export default function EventDetailScreen() {
     apiFetch(`/events/${id}/supplies`)
       .then(({ supplies }) => setSupplies(supplies))
       .catch(err => console.error('[EventDetail] failed to load supplies:', err.message))
+    apiFetch(`/events/${id}/participants`)
+      .then(({ participants }) => setParticipants(participants))
+      .catch(err => console.error('[EventDetail] failed to load participants:', err.message))
   }, [id])
+
+  async function handleDeclineParticipant(userId, reason) {
+    try {
+      await apiFetch(`/events/${id}/participants/${userId}/decline`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      })
+      setParticipants(prev => prev.filter(p => p.id !== userId))
+      setEvent(e => ({ ...e, current_participants: Math.max(0, e.current_participants - 1) }))
+    } catch (err) {
+      console.error('[EventDetail] decline failed:', err.message)
+    }
+  }
 
   async function handleClaim(supplyId, amount) {
     try {
@@ -308,6 +381,26 @@ export default function EventDetailScreen() {
           </div>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', flexShrink: 0 }}>{pct}%</span>
         </div>
+
+        {/* Participants list */}
+        {participants.length > 0 && (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: .06, marginBottom: 8 }}>
+              Учасники
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              {participants.map(p => (
+                <ParticipantRow
+                  key={p.id}
+                  person={p}
+                  isCreator={p.id === event.creator_id}
+                  canManage={event.is_creator && !isEnded}
+                  onDecline={handleDeclineParticipant}
+                />
+              ))}
+            </div>
+          </>
+        )}
 
         {/* Conditions */}
         {(event.conditions?.with_pets || event.conditions?.with_kids || event.conditions?.verified_only) && (

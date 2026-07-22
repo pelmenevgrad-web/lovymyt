@@ -6,6 +6,7 @@ import { Avatar } from '../components/EventCard.jsx'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
 import { apiFetch } from '../lib/api.js'
 import { CATEGORIES } from '../data/mockData.js'
+import ReviewsList from '../components/ReviewsList.jsx'
 
 function shareApp() {
   shareViaTelegram(
@@ -275,9 +276,7 @@ export default function ProfileScreen() {
         <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 4 }}>
           Відгуки <span style={{ color: 'var(--text-3)', fontWeight: 500, fontSize: 14 }}>({user.rating_count})</span>
         </div>
-        <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
-          Поки що немає відгуків.
-        </div>
+        <ReviewsList userId={user.id} />
       </div>
 
       <div style={{ height: 20 }} />

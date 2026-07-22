@@ -6,6 +6,14 @@ import BackButton from '../components/BackButton.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 
+// Must match FUNNY_STATUSES in backend/src/index.js — anything else is
+// silently dropped server-side.
+const FUNNY_STATUSES = [
+  'Душа компанії', 'Найсмішніший', 'Король/королева танцполу',
+  'Найкраще пригостив(-ла)', 'Найпунктуальніший', 'Фотограф заходу',
+  'Найтихіший', 'Балакун',
+]
+
 function StarPicker({ value, onChange }) {
   return (
     <span style={{ display: 'inline-flex', gap: 4 }}>
@@ -30,6 +38,7 @@ export default function EventReviewScreen() {
   const [status, setStatus] = useState('pending') // pending | ok | error
   const [ratings, setRatings] = useState({})
   const [comments, setComments] = useState({})
+  const [funnyStatuses, setFunnyStatuses] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const [done, setDone] = useState(false)
@@ -46,7 +55,9 @@ export default function EventReviewScreen() {
   async function handleSubmit() {
     const reviews = Object.entries(ratings)
       .filter(([, rating]) => rating > 0)
-      .map(([to_user_id, rating]) => ({ to_user_id, rating, comment: comments[to_user_id] }))
+      .map(([to_user_id, rating]) => ({
+        to_user_id, rating, comment: comments[to_user_id], funny_status: funnyStatuses[to_user_id],
+      }))
 
     if (reviews.length === 0) {
       setSubmitError('Постав хоча б одну оцінку')
@@ -127,6 +138,25 @@ export default function EventReviewScreen() {
                 value={ratings[person.id] ?? 0}
                 onChange={v => setRatings(r => ({ ...r, [person.id]: v }))}
               />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                {FUNNY_STATUSES.map(label => {
+                  const selected = funnyStatuses[person.id] === label
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => setFunnyStatuses(f => ({ ...f, [person.id]: selected ? undefined : label }))}
+                      className="chip"
+                      style={{
+                        background: selected ? 'var(--accent)' : 'var(--card)',
+                        color: selected ? '#fff' : 'var(--text-2)',
+                        border: '1.5px solid ' + (selected ? 'var(--accent)' : 'var(--border)'),
+                      }}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
               <textarea
                 placeholder="Коментар (необов'язково)"
                 rows={2}

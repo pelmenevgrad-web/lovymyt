@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Trophy } from 'lucide-react'
 import { CATEGORIES } from '../data/mockData.js'
 import { apiFetch } from '../lib/api.js'
 
@@ -20,6 +21,28 @@ export default function CategoriesScreen() {
   return (
     <div className="page" style={{ padding: '20px 16px 0' }}>
       <div style={{ fontWeight: 800, fontSize: 20, marginBottom: 16 }}>Категорії</div>
+
+      <div
+        className="card"
+        onClick={() => navigate('/events/history')}
+        style={{
+          padding: 16, marginBottom: 16, cursor: 'pointer', userSelect: 'none',
+          display: 'flex', alignItems: 'center', gap: 12,
+          background: 'linear-gradient(135deg, #F59E0B, #EC4899)', color: '#fff',
+        }}
+      >
+        <div style={{
+          width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+          background: 'rgba(255,255,255,.25)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Trophy size={22} />
+        </div>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>Рейтинг заходів</div>
+          <div style={{ fontSize: 12, opacity: .9, marginTop: 2 }}>Минулі заходи за оцінками учасників</div>
+        </div>
+      </div>
 
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12,

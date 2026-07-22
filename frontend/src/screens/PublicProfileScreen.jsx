@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { Star, BadgeCheck, Loader2, AlertTriangle } from 'lucide-react'
 import { Avatar } from '../components/EventCard.jsx'
 import BackButton from '../components/BackButton.jsx'
+import ReviewsList from '../components/ReviewsList.jsx'
 import { apiFetch } from '../lib/api.js'
 
 function Stars({ rating }) {
@@ -125,6 +126,14 @@ export default function PublicProfileScreen() {
           </div>
         </div>
       )}
+
+      {/* Reviews */}
+      <div style={{ padding: '20px 16px 0' }}>
+        <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 12 }}>
+          Відгуки <span style={{ color: 'var(--text-3)', fontWeight: 500, fontSize: 14 }}>({user.rating_count})</span>
+        </div>
+        <ReviewsList userId={user.id} />
+      </div>
 
       <div style={{ height: 20 }} />
     </div>

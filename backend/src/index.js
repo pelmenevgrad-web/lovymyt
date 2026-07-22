@@ -699,6 +699,62 @@ app.get('/events/:id/participants', async (req, res) => {
   res.json({ participants: people, creator_id: event.creator_id })
 })
 
+// Organizer removes an accepted participant, with a reason shown to them
+app.post('/events/:id/participants/:userId/decline', requireAuth, async (req, res) => {
+  const { data: event, error: eventErr } = await supabase
+    .from('events')
+    .select('title, creator_id, status')
+    .eq('id', req.params.id)
+    .single()
+
+  if (eventErr) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  if (event.creator_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки організатор може відмовити учаснику' })
+  }
+  if (req.params.userId === event.creator_id) {
+    return res.status(400).json({ error: 'Не можна відмовити собі' })
+  }
+  if (event.status === 'completed' || event.status === 'cancelled') {
+    return res.status(400).json({ error: 'Захід вже завершено' })
+  }
+
+  const reason = req.body?.reason?.trim()
+  if (!reason) {
+    return res.status(400).json({ error: 'Опиши причину відмови' })
+  }
+
+  const { data: declined, error } = await supabase
+    .from('event_participants')
+    .update({ status: 'declined', decline_reason: reason })
+    .eq('event_id', req.params.id)
+    .eq('user_id', req.params.userId)
+    .eq('status', 'accepted')
+    .select('user:users(telegram_id)')
+    .single()
+
+  if (error || !declined) {
+    console.error('Declining participant failed:', error?.message)
+    return res.status(500).json({ error: 'Failed to decline participant' })
+  }
+
+  notifyUser(
+    declined.user?.telegram_id,
+    `❌ Організатор відмовив тобі в участі у заході «${event.title}».\nПричина: ${reason}`,
+  ).catch(() => {})
+
+  res.json({ ok: true })
+})
+
+// Fixed set of light-hearted post-event superlatives — kept as plain text
+// (not a DB enum) so the list can grow without another migration.
+const FUNNY_STATUSES = [
+  'Душа компанії', 'Найсмішніший', 'Король/королева танцполу',
+  'Найкраще пригостив(-ла)', 'Найпунктуальніший', 'Фотограф заходу',
+  'Найтихіший', 'Балакун',
+]
+
 // Submit ratings/comments for other people who were at the same event.
 // Upserts so re-submitting just edits the earlier review instead of erroring.
 app.post('/events/:id/reviews', requireAuth, async (req, res) => {
@@ -715,6 +771,7 @@ app.post('/events/:id/reviews', requireAuth, async (req, res) => {
       to_user_id: r.to_user_id,
       rating: Number(r.rating),
       comment: r.comment?.trim() || null,
+      funny_status: FUNNY_STATUSES.includes(r.funny_status) ? r.funny_status : null,
     }))
 
   if (rows.length === 0) {
@@ -731,6 +788,22 @@ app.post('/events/:id/reviews', requireAuth, async (req, res) => {
   }
 
   res.status(201).json({ ok: true })
+})
+
+// Public list of reviews someone has received — shown on their profile
+app.get('/users/:id/reviews', async (req, res) => {
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('id, rating, comment, funny_status, created_at, from_user:users!reviews_from_user_id_fkey(id, first_name, avatar_url), event:events(id, title)')
+    .eq('to_user_id', req.params.id)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Fetching user reviews failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load reviews' })
+  }
+
+  res.json({ reviews: data })
 })
 
 const SUPPLY_SELECT = '*, claims:event_supply_claims(amount, user:users(id, first_name, avatar_url))'
