@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { X, Loader2, Check } from 'lucide-react'
 import { apiFetch } from '../lib/api.js'
-import { resolveIcon } from '../lib/icons.js'
 import TopupSheet from './TopupSheet.jsx'
+import GiftBadge from './GiftBadge.jsx'
 
 // Bottom sheet for picking a gift to send another user, paid from the
 // sender's own Stars balance (POST /users/:id/gifts). If the balance is too
@@ -12,6 +12,7 @@ export default function GiftSheet({ userId, myBalance, onClose, onSent, onBalanc
   const [sendingId, setSendingId] = useState(null)
   const [error, setError] = useState(null)
   const [sent, setSent] = useState(false)
+  const [sentGift, setSentGift] = useState(null)
   const [showTopup, setShowTopup] = useState(false)
 
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function GiftSheet({ userId, myBalance, onClose, onSent, onBalanc
         body: JSON.stringify({ gift_id: gift.id }),
       })
       onBalanceChange(stars_balance)
+      setSentGift(gift)
       setSent(true)
       onSent?.()
       setTimeout(onClose, 1200)
@@ -65,8 +67,10 @@ export default function GiftSheet({ userId, myBalance, onClose, onSent, onBalanc
         </div>
 
         {sent ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '20px 0' }}>
-            <Check size={32} color="var(--green)" />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '20px 0' }}>
+            <div className="gift-pop">
+              <GiftBadge iconName={sentGift?.icon_name} color={sentGift?.color} size={64} />
+            </div>
             <div style={{ fontWeight: 700 }}>Подарунок надіслано!</div>
           </div>
         ) : (
@@ -79,8 +83,7 @@ export default function GiftSheet({ userId, myBalance, onClose, onSent, onBalanc
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                {gifts.map(gift => {
-                  const Icon = resolveIcon(gift.icon_name)
+                {gifts.map((gift, i) => {
                   const canAfford = myBalance >= gift.price_stars
                   return (
                     <button
@@ -89,15 +92,17 @@ export default function GiftSheet({ userId, myBalance, onClose, onSent, onBalanc
                       style={{
                         padding: 12, border: '1.5px solid var(--border)', cursor: 'pointer',
                         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-                        opacity: sendingId && sendingId !== gift.id ? .5 : 1,
+                        opacity: (sendingId && sendingId !== gift.id) || !canAfford ? .55 : 1,
                       }}
                       disabled={!!sendingId}
                       onClick={() => handleSend(gift)}
                     >
                       {sendingId === gift.id ? (
-                        <Loader2 size={22} className="spin" color="var(--accent)" />
+                        <div style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Loader2 size={22} className="spin" color="var(--accent)" />
+                        </div>
                       ) : (
-                        <Icon size={22} color={canAfford ? 'var(--accent)' : 'var(--text-3)'} />
+                        <GiftBadge iconName={gift.icon_name} color={gift.color} delay={i * 0.3} />
                       )}
                       <span style={{ fontSize: 12, fontWeight: 600 }}>{gift.name}</span>
                       <span style={{ fontSize: 11, color: canAfford ? 'var(--text-2)' : 'var(--red)' }}>{gift.price_stars} Stars</span>

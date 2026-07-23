@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { Plus, Pencil, Check, X, Loader2, Star } from 'lucide-react'
 import BackButton from '../components/BackButton.jsx'
 import IconPicker from '../components/IconPicker.jsx'
+import GiftBadge from '../components/GiftBadge.jsx'
 import { apiFetch } from '../lib/api.js'
-import { resolveIcon } from '../lib/icons.js'
 
 function GiftForm({ initial, onSave, onCancel, saving }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [iconName, setIconName] = useState(initial?.icon_name ?? 'Gift')
+  const [color, setColor] = useState(initial?.color ?? '#6366F1')
   const [priceStars, setPriceStars] = useState(initial?.price_stars ?? 10)
   const [sortOrder, setSortOrder] = useState(initial?.sort_order ?? 0)
 
@@ -15,11 +16,19 @@ function GiftForm({ initial, onSave, onCancel, saving }) {
 
   return (
     <div className="card" style={{ padding: 14, marginBottom: 10 }}>
-      <input
-        placeholder="Назва подарунка" value={name}
-        onChange={e => setName(e.target.value)} style={{ marginBottom: 10, width: '100%' }}
-      />
-      <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+        <GiftBadge iconName={iconName} color={color} size={44} />
+        <input
+          placeholder="Назва подарунка" value={name}
+          onChange={e => setName(e.target.value)} style={{ flex: 1 }}
+        />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <label style={{ fontSize: 12, color: 'var(--text-2)' }}>Колір</label>
+        <input
+          type="color" value={color} onChange={e => setColor(e.target.value)}
+          style={{ width: 40, height: 32, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}
+        />
         <input
           type="number" min={1} placeholder="Ціна, Stars" value={priceStars}
           onChange={e => setPriceStars(e.target.value)} style={{ flex: 1 }}
@@ -30,12 +39,12 @@ function GiftForm({ initial, onSave, onCancel, saving }) {
         />
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 6 }}>Іконка</div>
-      <IconPicker value={iconName} onChange={setIconName} />
+      <IconPicker value={iconName} onChange={setIconName} color={color} />
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         <button
           className="btn btn-primary" style={{ flex: 1, opacity: saving || !valid ? .6 : 1 }}
           disabled={saving || !valid}
-          onClick={() => onSave({ name: name.trim(), icon_name: iconName, price_stars: Number(priceStars), sort_order: sortOrder })}
+          onClick={() => onSave({ name: name.trim(), icon_name: iconName, color, price_stars: Number(priceStars), sort_order: sortOrder })}
         >
           {saving ? 'Зберігаємо…' : 'Зберегти'}
         </button>
@@ -130,19 +139,12 @@ export default function AdminGiftsScreen() {
                 />
               )
             }
-            const Icon = resolveIcon(g.icon_name)
             return (
               <div
                 key={g.id} className="card"
                 style={{ padding: 12, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10, opacity: g.is_active ? 1 : .5 }}
               >
-                <div style={{
-                  width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-                  background: 'var(--accent-light)', color: 'var(--accent)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <Icon size={18} />
-                </div>
+                <GiftBadge iconName={g.icon_name} color={g.color} size={36} iconSize={18} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{g.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4 }}>

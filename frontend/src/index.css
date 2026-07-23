@@ -176,6 +176,51 @@ body {
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin 1s linear infinite; }
 
+/* ── Gift badges ── */
+/* Diagonal light sweep across a gift's gradient badge, looping slowly so it
+   reads as "shiny" rather than distracting. */
+@keyframes gift-shine {
+  0%   { transform: translateX(-120%) rotate(20deg); }
+  100% { transform: translateX(220%) rotate(20deg); }
+}
+
+.gift-badge {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.gift-badge::after {
+  content: '';
+  position: absolute;
+  top: -60%;
+  left: 0;
+  width: 40%;
+  height: 220%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+  animation: gift-shine 3.2s ease-in-out infinite;
+  animation-delay: var(--gift-shine-delay, 0s);
+}
+
+/* Soft breathing glow using the gift's own color, set via --gift-color */
+@keyframes gift-glow {
+  0%, 100% { box-shadow: 0 2px 10px var(--gift-color, rgba(0,0,0,.2)), 0 0 0 0 transparent; }
+  50%      { box-shadow: 0 2px 16px var(--gift-color, rgba(0,0,0,.2)), 0 0 14px 2px var(--gift-color, transparent); }
+}
+
+.gift-badge-glow {
+  animation: gift-glow 2.4s ease-in-out infinite;
+}
+
+/* Pop-in celebration for the "sent!" confirmation state */
+@keyframes gift-pop {
+  0%   { transform: scale(.3) rotate(-15deg); opacity: 0; }
+  60%  { transform: scale(1.15) rotate(6deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+.gift-pop { animation: gift-pop .5s cubic-bezier(.34,1.56,.64,1); }
+
 /* ── Utility ── */
 .chip {
   display: inline-flex;

@@ -455,7 +455,7 @@ app.get('/funny-statuses', async (_req, res) => {
 app.get('/gifts', async (_req, res) => {
   const { data, error } = await supabase
     .from('gifts_catalog')
-    .select('id, name, icon_name, price_stars')
+    .select('id, name, icon_name, color, price_stars')
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
 
@@ -470,7 +470,7 @@ app.get('/gifts', async (_req, res) => {
 app.get('/users/:id/gifts', async (req, res) => {
   const { data, error } = await supabase
     .from('likes_gifts')
-    .select('id, stars_amount, created_at, gift:gifts_catalog(id, name, icon_name), from_user:users!likes_gifts_from_user_id_fkey(id, first_name, avatar_url)')
+    .select('id, stars_amount, created_at, gift:gifts_catalog(id, name, icon_name, color), from_user:users!likes_gifts_from_user_id_fkey(id, first_name, avatar_url)')
     .eq('to_user_id', req.params.id)
     .eq('type', 'gift')
     .order('created_at', { ascending: false })
@@ -1686,13 +1686,13 @@ app.get('/admin/gifts', requireAdmin, async (_req, res) => {
 })
 
 app.post('/admin/gifts', requireAdmin, async (req, res) => {
-  const { name, icon_name, price_stars, sort_order } = req.body ?? {}
+  const { name, icon_name, color, price_stars, sort_order } = req.body ?? {}
   if (!name?.trim() || !(Number(price_stars) > 0)) {
     return res.status(400).json({ error: 'name and a positive price_stars are required' })
   }
   const { data, error } = await supabase
     .from('gifts_catalog')
-    .insert({ name: name.trim(), icon_name: icon_name || null, price_stars: Number(price_stars), sort_order: sort_order || 0 })
+    .insert({ name: name.trim(), icon_name: icon_name || null, color: color || null, price_stars: Number(price_stars), sort_order: sort_order || 0 })
     .select()
     .single()
   if (error) {
@@ -1703,10 +1703,11 @@ app.post('/admin/gifts', requireAdmin, async (req, res) => {
 })
 
 app.patch('/admin/gifts/:id', requireAdmin, async (req, res) => {
-  const { name, icon_name, price_stars, sort_order, is_active } = req.body ?? {}
+  const { name, icon_name, color, price_stars, sort_order, is_active } = req.body ?? {}
   const patch = {}
   if (name !== undefined) patch.name = name.trim()
   if (icon_name !== undefined) patch.icon_name = icon_name
+  if (color !== undefined) patch.color = color
   if (price_stars !== undefined) {
     if (!(Number(price_stars) > 0)) return res.status(400).json({ error: 'price_stars must be positive' })
     patch.price_stars = Number(price_stars)
