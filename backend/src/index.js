@@ -1431,6 +1431,88 @@ app.get('/events/:id/chat/messages', requireAuth, async (req, res) => {
   }
 })
 
+// Marks an event's chat as read up to now for the caller — the frontend
+// calls this whenever EventChatScreen opens, clearing that chat's
+// contribution to the bottom-nav unread badge.
+app.post('/events/:id/chat/read', requireAuth, async (req, res) => {
+  const allowed = await canAccessChat(req.params.id, req.auth.sub)
+  if (!allowed) {
+    return res.status(403).json({ error: 'Доступно тільки учасникам заходу' })
+  }
+
+  const { error } = await supabase
+    .from('chat_reads')
+    .upsert({ event_id: req.params.id, user_id: req.auth.sub, last_read_at: new Date().toISOString() }, { onConflict: 'event_id,user_id' })
+
+  if (error) {
+    console.error('Marking chat read failed:', error.message)
+    return res.status(500).json({ error: 'Failed to mark chat read' })
+  }
+  res.json({ ok: true })
+})
+
+// Whether the caller has any unread messages across all their event chats —
+// backs the bottom-nav badge dot. A message counts as unread if it's newer
+// than that chat's last_read_at (or the chat was never read) and wasn't
+// sent by the caller themself.
+app.get('/users/me/chats/unread', requireAuth, async (req, res) => {
+  const userId = req.auth.sub
+
+  const { data: joinedRows } = await supabase
+    .from('event_participants')
+    .select('event_id')
+    .eq('user_id', userId)
+    .eq('status', 'accepted')
+  const joinedIds = (joinedRows ?? []).map(r => r.event_id)
+
+  let eventQuery = supabase.from('events').select('id')
+  eventQuery = joinedIds.length > 0
+    ? eventQuery.or(`creator_id.eq.${userId},id.in.(${joinedIds.join(',')})`)
+    : eventQuery.eq('creator_id', userId)
+  const { data: myEvents } = await eventQuery
+  const myEventIds = (myEvents ?? []).map(e => e.id)
+
+  if (myEventIds.length === 0) {
+    return res.json({ unread: false })
+  }
+
+  const { data: chats } = await supabase.from('event_chats').select('id, event_id').in('event_id', myEventIds)
+  if (!chats || chats.length === 0) {
+    return res.json({ unread: false })
+  }
+  const chatIdToEventId = new Map(chats.map(c => [c.id, c.event_id]))
+
+  const { data: reads } = await supabase
+    .from('chat_reads').select('event_id, last_read_at')
+    .eq('user_id', userId).in('event_id', myEventIds)
+  const lastReadByEvent = new Map((reads ?? []).map(r => [r.event_id, r.last_read_at]))
+
+  const { data: messages } = await supabase
+    .from('chat_messages')
+    .select('chat_id, sender_id, created_at')
+    .in('chat_id', [...chatIdToEventId.keys()])
+    .neq('sender_id', userId)
+    .order('created_at', { ascending: false })
+
+  const latestByChat = new Map()
+  for (const m of messages ?? []) {
+    if (!latestByChat.has(m.chat_id)) latestByChat.set(m.chat_id, m.created_at)
+  }
+
+  let unread = false
+  for (const [chatId, eventId] of chatIdToEventId) {
+    const latest = latestByChat.get(chatId)
+    if (!latest) continue
+    const lastRead = lastReadByEvent.get(eventId)
+    if (!lastRead || new Date(latest) > new Date(lastRead)) {
+      unread = true
+      break
+    }
+  }
+
+  res.json({ unread })
+})
+
 // Send a chat message — persisted, then broadcast to anyone subscribed via socket
 app.post('/events/:id/chat/messages', requireAuth, async (req, res) => {
   const allowed = await canAccessChat(req.params.id, req.auth.sub)

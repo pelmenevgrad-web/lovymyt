@@ -29,6 +29,8 @@ export default function EventChatScreen() {
     apiFetch(`/events/${id}/chat/messages`)
       .then(({ messages }) => { setMessages(messages); setStatus('ok') })
       .catch(err => { setErrorMsg(err.message); setStatus('error') })
+    apiFetch(`/events/${id}/chat/read`, { method: 'POST' })
+      .catch(err => console.error('[Chat] failed to mark read:', err.message))
   }, [id])
 
   useEffect(() => {
@@ -39,6 +41,8 @@ export default function EventChatScreen() {
     socket.emit('join_event', id)
     socket.on('new_message', (message) => {
       setMessages(prev => (prev ?? []).concat(message))
+      // Chat stays open, so any message arriving while we're here counts as read.
+      apiFetch(`/events/${id}/chat/read`, { method: 'POST' }).catch(() => {})
     })
 
     return () => {

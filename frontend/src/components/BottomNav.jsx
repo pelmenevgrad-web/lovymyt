@@ -1,6 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Map, LayoutGrid, Plus, MessageCircle, User } from 'lucide-react'
+import { useAuth } from '../context/AuthContext.jsx'
+import { apiFetch } from '../lib/api.js'
+
+const UNREAD_POLL_MS = 20_000
 
 const TABS = [
   { path: '/',           Icon: Map,           label: 'Карта' },
@@ -13,8 +17,23 @@ const TABS = [
 export default function BottomNav() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  // TODO: замінити на реальні дані непрочитаних чатів із Supabase
-  const [hasUnreadChats] = useState(true)
+  const { status } = useAuth()
+  const [hasUnreadChats, setHasUnreadChats] = useState(false)
+
+  useEffect(() => {
+    if (status !== 'ok') return
+    let cancelled = false
+
+    function check() {
+      apiFetch('/users/me/chats/unread')
+        .then(({ unread }) => { if (!cancelled) setHasUnreadChats(unread) })
+        .catch(err => console.error('[BottomNav] failed to check unread chats:', err.message))
+    }
+
+    check()
+    const interval = setInterval(check, UNREAD_POLL_MS)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [status, pathname])
 
   return (
     <nav style={{
