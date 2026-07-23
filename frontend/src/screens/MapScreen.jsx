@@ -41,8 +41,9 @@ function markerAvatarsHtml(people) {
 // shown as a small pulsing badge instead of a full halo around the pin.
 // `extraCategoryCount` (event tagged with more than one category) gets a
 // "+N" pill on the opposite corner, since a second full icon reads as
-// clutter at typical map zoom.
-function createMarker(cat, isActive, joinableNow, people, extraCategoryCount = 0) {
+// clutter at typical map zoom. `isProOrganizer` adds a thin gold ring around
+// the pin body — the map-priority perk PRO organizers get.
+function createMarker(cat, isActive, joinableNow, people, extraCategoryCount = 0, isProOrganizer = false) {
   const body = isActive ? 48 : 40
   const height = Math.round(body * 1.45)
   const centerY = height / 2
@@ -82,6 +83,14 @@ function createMarker(cat, isActive, joinableNow, people, extraCategoryCount = 0
             box-shadow:0 1px 4px rgba(0,0,0,.3);
             z-index:2;
           ">+${extraCategoryCount}</div>
+        ` : ''}
+        ${isProOrganizer ? `
+          <div style="
+            position:absolute; left:50%; top:${centerY}px; margin:-${half + 3}px 0 0 -${half + 3}px;
+            width:${body + 6}px; height:${body + 6}px;
+            background:#F59E0B; border-radius:50% 50% 50% 0;
+            transform:rotate(-45deg);
+          "></div>
         ` : ''}
         <div style="
           position:absolute; left:50%; top:${centerY}px; margin:-${half}px 0 0 -${half}px;
@@ -210,7 +219,7 @@ export default function MapScreen() {
               <Marker
                 key={event.id}
                 position={[event.lat, event.lng]}
-                icon={createMarker(cat, isActive, joinableNow, event.participant_avatars, (event.category_ids?.length ?? 1) - 1)}
+                icon={createMarker(cat, isActive, joinableNow, event.participant_avatars, (event.category_ids?.length ?? 1) - 1, event.creator_is_pro)}
                 eventHandlers={{ click: () => handleMarkerClick(event) }}
               />
             )

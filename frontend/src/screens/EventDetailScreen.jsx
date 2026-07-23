@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
-  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX,
+  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX, Star,
 } from 'lucide-react'
 import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
@@ -350,6 +350,7 @@ export default function EventDetailScreen() {
         >
           <Avatar name={event.creator_name} url={event.creator_avatar_url} size={28} />
           <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Організатор: <strong style={{ color: 'var(--text)' }}>{event.creator_name}</strong></span>
+          {event.creator_is_pro && <Star size={13} fill="#F59E0B" color="#F59E0B" />}
         </div>
 
         {/* Key facts */}

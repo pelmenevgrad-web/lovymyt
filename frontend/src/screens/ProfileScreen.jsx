@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History, ShieldEllipsis } from 'lucide-react'
+import WebApp from '@twa-dev/sdk'
+import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History, ShieldEllipsis, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/EventCard.jsx'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
@@ -12,6 +13,85 @@ function shareApp() {
   shareViaTelegram(
     appLink(),
     'Приєднуйся до ЛовиМить — знаходь компанію для спільного дозвілля поруч! 🎉',
+  )
+}
+
+// Must match STARS_TOPUP_PACKAGES / PRO_PRICE_STARS in backend/src/index.js
+const STARS_TOPUP_PACKAGES = [100, 300, 750]
+const PRO_PRICE_STARS = 300
+
+// Opens a Telegram Stars invoice and resolves once the sheet closes —
+// 'paid' means the payment actually went through (webhook already fired by
+// the time openInvoice's callback runs, so refetching /users/me picks it up).
+function payInvoice(invoiceLink) {
+  return new Promise((resolve) => {
+    WebApp.openInvoice(invoiceLink, (status) => resolve(status))
+  })
+}
+
+function TopupSheet({ onClose, onPaid }) {
+  const [payingPackage, setPayingPackage] = useState(null)
+  const [error, setError] = useState(null)
+
+  async function handlePick(amount) {
+    if (payingPackage) return
+    setPayingPackage(amount)
+    setError(null)
+    try {
+      const { invoice_link } = await apiFetch('/stars/topup', {
+        method: 'POST',
+        body: JSON.stringify({ package: amount }),
+      })
+      const status = await payInvoice(invoice_link)
+      if (status === 'paid') {
+        await onPaid()
+        onClose()
+      } else if (status === 'failed') {
+        setError('Оплата не пройшла')
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setPayingPackage(null)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000,
+        display: 'flex', alignItems: 'flex-end',
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="card"
+        style={{ width: '100%', borderRadius: '20px 20px 0 0', padding: 20 }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ fontWeight: 800, fontSize: 17 }}>Поповнити баланс</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer' }}>
+            <X size={20} />
+          </button>
+        </div>
+        {error && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 10, textAlign: 'center' }}>{error}</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {STARS_TOPUP_PACKAGES.map(amount => (
+            <button
+              key={amount}
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: payingPackage && payingPackage !== amount ? .5 : 1 }}
+              disabled={!!payingPackage}
+              onClick={() => handlePick(amount)}
+            >
+              {payingPackage === amount ? <Loader2 size={16} className="spin" /> : <Star size={16} fill="currentColor" />}
+              {amount} Stars
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -62,9 +142,12 @@ function CenteredMessage({ icon: Icon, title, text }) {
 
 export default function ProfileScreen() {
   const navigate = useNavigate()
-  const { user, status, error } = useAuth()
+  const { user, status, error, updateUser } = useAuth()
   const { categories } = useCategories()
   const [myEvents, setMyEvents] = useState(null)
+  const [showTopup, setShowTopup] = useState(false)
+  const [subscribing, setSubscribing] = useState(false)
+  const [proError, setProError] = useState(null)
 
   useEffect(() => {
     if (status !== 'ok') return
@@ -72,6 +155,30 @@ export default function ProfileScreen() {
       .then(({ events }) => setMyEvents(events))
       .catch(err => console.error('[Profile] failed to load my events:', err.message))
   }, [status])
+
+  async function refreshMe() {
+    const { user: fresh } = await apiFetch('/users/me')
+    updateUser(fresh)
+  }
+
+  async function handleSubscribePro() {
+    if (subscribing) return
+    setSubscribing(true)
+    setProError(null)
+    try {
+      const { invoice_link } = await apiFetch('/pro/subscribe', { method: 'POST' })
+      const paymentStatus = await payInvoice(invoice_link)
+      if (paymentStatus === 'paid') {
+        await refreshMe()
+      } else if (paymentStatus === 'failed') {
+        setProError('Оплата не пройшла')
+      }
+    } catch (err) {
+      setProError(err.message)
+    } finally {
+      setSubscribing(false)
+    }
+  }
 
   if (status === 'pending') {
     return (
@@ -217,7 +324,7 @@ export default function ProfileScreen() {
               <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Ваш баланс</div>
             </div>
           </div>
-          <button className="btn btn-ghost" style={{ padding: '10px 18px', fontSize: 13 }}>Поповнити</button>
+          <button className="btn btn-ghost" style={{ padding: '10px 18px', fontSize: 13 }} onClick={() => setShowTopup(true)}>Поповнити</button>
         </div>
       </div>
 
@@ -234,12 +341,25 @@ export default function ProfileScreen() {
             <Sparkles size={18} /> Спробуй PRO
           </div>
           <div style={{ fontSize: 13, opacity: .9, marginBottom: 12 }}>
-            Бачиш, хто переглянув профіль, пріоритет на карті, необмежені заходи
+            Пріоритет на карті та необмежена кількість активних заходів (безкоштовно — до 2)
           </div>
-          <button className="btn" style={{ background: 'rgba(255,255,255,.25)', color: '#fff', padding: '10px 20px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            Активувати за Stars <Star size={14} fill="currentColor" />
+          {proError && (
+            <div style={{ fontSize: 12, marginBottom: 10, background: 'rgba(0,0,0,.15)', borderRadius: 8, padding: '6px 10px' }}>{proError}</div>
+          )}
+          <button
+            className="btn"
+            style={{ background: 'rgba(255,255,255,.25)', color: '#fff', padding: '10px 20px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: subscribing ? .7 : 1 }}
+            disabled={subscribing}
+            onClick={handleSubscribePro}
+          >
+            {subscribing ? <Loader2 size={14} className="spin" /> : <Star size={14} fill="currentColor" />}
+            Активувати за {PRO_PRICE_STARS} Stars
           </button>
         </div>
+      )}
+
+      {showTopup && (
+        <TopupSheet onClose={() => setShowTopup(false)} onPaid={refreshMe} />
       )}
 
       {/* My events */}

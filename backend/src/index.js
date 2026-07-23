@@ -33,8 +33,76 @@ export const supabase = createClient(
 const bot = new Telegraf(BOT_TOKEN)
 const BOT_USERNAME = 'lovymyt_bot'
 
+// Monetization via real Telegram Stars payments (currency 'XTR') — PRO is a
+// direct 1-month invoice, top-ups credit users.stars_balance for future
+// spending (gifts). Free tier is capped on simultaneous active events.
+const PRO_PRICE_STARS = 300
+const PRO_DURATION_DAYS = 30
+const STARS_TOPUP_PACKAGES = [100, 300, 750]
+const FREE_ACTIVE_EVENTS_LIMIT = 2
+
+function isProActive(user) {
+  return !!user.is_pro && (!user.pro_expires_at || new Date(user.pro_expires_at) > new Date())
+}
+
 bot.start((ctx) => ctx.reply('Ласкаво просимо в ЛовіМіть! Відкрий для себе новий світ емоцій.'))
 bot.help((ctx) => ctx.reply('Используй кнопку меню для запуска приложения.'))
+
+// Telegram requires answering within 10s — we don't need extra validation
+// since the invoice price/payload were set by us moments earlier.
+bot.on('pre_checkout_query', (ctx) => ctx.answerPreCheckoutQuery(true))
+
+bot.on('message', async (ctx, next) => {
+  const payment = ctx.message?.successful_payment
+  if (!payment) return next()
+
+  let payload
+  try {
+    payload = JSON.parse(payment.invoice_payload)
+  } catch {
+    console.error('Unparseable successful_payment payload:', payment.invoice_payload)
+    return
+  }
+
+  const { data: user, error: userErr } = await supabase
+    .from('users')
+    .select('id, is_pro, pro_expires_at, stars_balance')
+    .eq('telegram_id', ctx.from.id)
+    .single()
+  if (userErr || !user) {
+    console.error('successful_payment: user not found for telegram_id', ctx.from.id)
+    return
+  }
+
+  if (payload.type === 'topup') {
+    const { error } = await supabase
+      .from('users')
+      .update({ stars_balance: user.stars_balance + payload.stars })
+      .eq('id', user.id)
+    if (error) return console.error('Crediting stars top-up failed:', error.message)
+
+    await supabase.from('stars_transactions').insert({
+      user_id: user.id, type: 'topup', amount: payload.stars,
+      telegram_payment_charge_id: payment.telegram_payment_charge_id,
+    })
+    ctx.reply(`✅ Нараховано ${payload.stars} Stars. Твій баланс: ${user.stars_balance + payload.stars}`).catch(() => {})
+  } else if (payload.type === 'pro') {
+    const base = isProActive(user) ? new Date(user.pro_expires_at) : new Date()
+    const newExpiry = new Date(base.getTime() + PRO_DURATION_DAYS * 86_400_000)
+
+    const { error } = await supabase
+      .from('users')
+      .update({ is_pro: true, pro_expires_at: newExpiry.toISOString() })
+      .eq('id', user.id)
+    if (error) return console.error('Activating PRO failed:', error.message)
+
+    await supabase.from('stars_transactions').insert({
+      user_id: user.id, type: 'pro_purchase', amount: PRO_PRICE_STARS,
+      telegram_payment_charge_id: payment.telegram_payment_charge_id,
+    })
+    ctx.reply(`✅ PRO активовано до ${newExpiry.toLocaleDateString('uk-UA')}`).catch(() => {})
+  }
+})
 
 // DMs a user via the bot — works any time once they've opened the bot once
 // (which auth already requires), not just while the Mini App is open.
@@ -277,6 +345,23 @@ app.patch('/users/me', requireAuth, async (req, res) => {
   res.json({ user: { ...user, ...(await computeUserStats(user.id)) } })
 })
 
+// Re-fetches the authenticated user's own row — used after actions that
+// change it server-side without a request body (e.g. a Stars payment
+// completing), where PATCH /users/me's "no editable fields" guard doesn't fit.
+app.get('/users/me', requireAuth, async (req, res) => {
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', req.auth.sub)
+    .single()
+
+  if (error) {
+    return res.status(404).json({ error: 'User not found' })
+  }
+
+  res.json({ user: { ...user, ...(await computeUserStats(user.id)) } })
+})
+
 // Public profile — for viewing another user's page (e.g. an event's organizer)
 app.get('/users/:id', async (req, res) => {
   const { data: user, error } = await supabase
@@ -290,6 +375,50 @@ app.get('/users/:id', async (req, res) => {
   }
 
   res.json({ user: { ...user, ...(await computeUserStats(user.id)) } })
+})
+
+// Real-money Telegram Stars invoice (currency 'XTR', no provider_token needed)
+// to top up the in-app stars_balance — credited once bot.on('message') sees
+// the matching successful_payment (see near top of file).
+app.post('/stars/topup', requireAuth, async (req, res) => {
+  const amount = Number(req.body?.package)
+  if (!STARS_TOPUP_PACKAGES.includes(amount)) {
+    return res.status(400).json({ error: 'Invalid package' })
+  }
+
+  try {
+    const invoiceLink = await bot.telegram.createInvoiceLink({
+      title: `${amount} Stars`,
+      description: `Поповнення балансу на ${amount} Stars у ЛовиМить`,
+      payload: JSON.stringify({ type: 'topup', stars: amount }),
+      provider_token: '',
+      currency: 'XTR',
+      prices: [{ label: `${amount} Stars`, amount }],
+    })
+    res.json({ invoice_link: invoiceLink })
+  } catch (err) {
+    console.error('Creating top-up invoice failed:', err.message)
+    res.status(500).json({ error: 'Failed to create invoice' })
+  }
+})
+
+// Real-money Stars invoice for a 1-month PRO subscription (stacks onto the
+// remaining time if already PRO, rather than wasting it).
+app.post('/pro/subscribe', requireAuth, async (req, res) => {
+  try {
+    const invoiceLink = await bot.telegram.createInvoiceLink({
+      title: 'ЛовиМить PRO — 1 місяць',
+      description: 'Необмежені активні заходи, пріоритет на карті',
+      payload: JSON.stringify({ type: 'pro' }),
+      provider_token: '',
+      currency: 'XTR',
+      prices: [{ label: 'PRO — 1 місяць', amount: PRO_PRICE_STARS }],
+    })
+    res.json({ invoice_link: invoiceLink })
+  } catch (err) {
+    console.error('Creating PRO invoice failed:', err.message)
+    res.status(500).json({ error: 'Failed to create invoice' })
+  }
 })
 
 // Public list of event categories — icon_name is a lucide-react component name
@@ -322,7 +451,7 @@ app.get('/funny-statuses', async (_req, res) => {
   res.json({ funny_statuses: data })
 })
 
-const EVENT_SELECT = '*, creator:users!events_creator_id_fkey(first_name, avatar_url), participants:event_participants(status, user:users(id, first_name, avatar_url)), categoryLinks:event_categories(category_id)'
+const EVENT_SELECT = '*, creator:users!events_creator_id_fkey(first_name, avatar_url, is_pro), participants:event_participants(status, user:users(id, first_name, avatar_url)), categoryLinks:event_categories(category_id)'
 
 // Shapes a DB row (with embedded creator/participants) into the flat object
 // shape the frontend already works with (same fields as the old mocks).
@@ -351,6 +480,7 @@ function shapeEvent(row) {
     creator_id: row.creator_id,
     creator_name: row.creator?.first_name ?? 'Користувач',
     creator_avatar_url: row.creator?.avatar_url ?? null,
+    creator_is_pro: row.creator?.is_pro ?? false,
     budget_type: row.budget_type,
     budget_amount: row.budget_amount,
     age_min: row.age_min,
@@ -369,6 +499,7 @@ app.get('/events', async (_req, res) => {
     .from('events')
     .select(EVENT_SELECT)
     .in('status', ['planned', 'gathering', 'active'])
+    .order('is_pro', { foreignTable: 'creator', ascending: false })
     .order('start_time', { ascending: true })
 
   if (error) {
@@ -464,6 +595,27 @@ app.post('/events', requireAuth, async (req, res) => {
   }
   if (allowed_gender && !['any', 'male', 'female'].includes(allowed_gender)) {
     return res.status(400).json({ error: 'allowed_gender must be "any", "male" or "female"' })
+  }
+
+  const { data: creator } = await supabase
+    .from('users')
+    .select('is_pro, pro_expires_at')
+    .eq('id', req.auth.sub)
+    .single()
+
+  if (!isProActive(creator ?? {})) {
+    const { count: activeCount } = await supabase
+      .from('events')
+      .select('id', { count: 'exact', head: true })
+      .eq('creator_id', req.auth.sub)
+      .in('status', ['planned', 'gathering', 'active'])
+
+    if ((activeCount ?? 0) >= FREE_ACTIVE_EVENTS_LIMIT) {
+      return res.status(403).json({
+        error: `На безкоштовному тарифі можна мати не більше ${FREE_ACTIVE_EVENTS_LIMIT} активних заходів. Онови до PRO для необмеженої кількості.`,
+        code: 'FREE_EVENT_LIMIT',
+      })
+    }
   }
 
   try {
@@ -1505,12 +1657,28 @@ async function sweepExpiredEvents() {
   if (error) console.error('Auto-complete sweep failed:', error.message)
 }
 
+// Flips is_pro back to false once pro_expires_at has passed — the frontend
+// and free-tier limit check both trust is_pro directly, so this can't be
+// left to compute lazily on every read the way isProActive() does elsewhere.
+async function sweepExpiredPro() {
+  const { error } = await supabase
+    .from('users')
+    .update({ is_pro: false })
+    .eq('is_pro', true)
+    .not('pro_expires_at', 'is', null)
+    .lt('pro_expires_at', new Date().toISOString())
+
+  if (error) console.error('PRO expiry sweep failed:', error.message)
+}
+
 async function start() {
   await new Promise((resolve) => httpServer.listen(PORT, resolve))
   console.log(`Backend listening on port ${PORT}`)
 
   sweepExpiredEvents()
   setInterval(sweepExpiredEvents, 5 * 60_000)
+  sweepExpiredPro()
+  setInterval(sweepExpiredPro, 5 * 60_000)
 
   if (WEBHOOK_URL) {
     const webhookEndpoint = `${WEBHOOK_URL}/webhook`

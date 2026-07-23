@@ -1,4 +1,4 @@
-import { BadgeCheck, Zap, Clock, MapPin } from 'lucide-react'
+import { BadgeCheck, Zap, Clock, MapPin, Star } from 'lucide-react'
 import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
 import { formatCountdown } from '../lib/format.js'
@@ -142,6 +142,7 @@ export default function EventCard({ event, onClick, compact = false }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Avatar name={event.creator_name} url={event.creator_avatar_url} size={24} />
           <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 500 }}>{event.creator_name}</span>
+          {event.creator_is_pro && <Star size={12} fill="#F59E0B" color="#F59E0B" />}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
