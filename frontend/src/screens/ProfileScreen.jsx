@@ -9,6 +9,7 @@ import { useCategories } from '../context/CategoriesContext.jsx'
 import ReviewsList from '../components/ReviewsList.jsx'
 import GiftsReceived from '../components/GiftsReceived.jsx'
 import TopupSheet from '../components/TopupSheet.jsx'
+import VerificationSheet from '../components/VerificationSheet.jsx'
 import { PRO_PRICE_STARS, payInvoice } from '../lib/payments.js'
 
 function shareApp() {
@@ -71,12 +72,17 @@ export default function ProfileScreen() {
   const [showTopup, setShowTopup] = useState(false)
   const [subscribing, setSubscribing] = useState(false)
   const [proError, setProError] = useState(null)
+  const [showVerification, setShowVerification] = useState(false)
+  const [verificationRequest, setVerificationRequest] = useState(null)
 
   useEffect(() => {
     if (status !== 'ok') return
     apiFetch('/users/me/events')
       .then(({ events }) => setMyEvents(events))
       .catch(err => console.error('[Profile] failed to load my events:', err.message))
+    apiFetch('/users/me/verification')
+      .then(({ request }) => setVerificationRequest(request))
+      .catch(err => console.error('[Profile] failed to load verification status:', err.message))
   }, [status])
 
   async function refreshMe() {
@@ -283,6 +289,46 @@ export default function ProfileScreen() {
 
       {showTopup && (
         <TopupSheet onClose={() => setShowTopup(false)} onPaid={refreshMe} />
+      )}
+
+      {/* Verification */}
+      {!user.is_verified && (
+        <div style={{ margin: '12px 16px 0' }} className="card">
+          <div style={{ padding: '14px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <BadgeCheck size={18} color="var(--accent)" />
+              <span style={{ fontWeight: 700, fontSize: 14 }}>Верифікація</span>
+            </div>
+            {verificationRequest?.status === 'pending' ? (
+              <div style={{ fontSize: 13, color: 'var(--text-2)' }}>Заявку надіслано, очікує на розгляд.</div>
+            ) : verificationRequest?.status === 'rejected' ? (
+              <>
+                <div style={{ fontSize: 13, color: 'var(--red)', marginBottom: 8 }}>
+                  Відхилено: {verificationRequest.reject_reason}
+                </div>
+                <button className="btn btn-ghost" style={{ width: '100%' }} onClick={() => setShowVerification(true)}>
+                  Подати заявку знову
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 10 }}>
+                  Підтверди, що це реальний профіль — отримай значок «Верифікований».
+                </div>
+                <button className="btn btn-ghost" style={{ width: '100%' }} onClick={() => setShowVerification(true)}>
+                  Подати заявку
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showVerification && (
+        <VerificationSheet
+          onClose={() => setShowVerification(false)}
+          onSubmitted={setVerificationRequest}
+        />
       )}
 
       <GiftsReceived userId={user.id} />

@@ -21,6 +21,7 @@ import AdminCategoriesScreen from './screens/AdminCategoriesScreen.jsx'
 import AdminFunnyStatusesScreen from './screens/AdminFunnyStatusesScreen.jsx'
 import AdminGiftsScreen from './screens/AdminGiftsScreen.jsx'
 import AdminReportsScreen from './screens/AdminReportsScreen.jsx'
+import AdminVerificationScreen from './screens/AdminVerificationScreen.jsx'
 import AdminUsersScreen from './screens/AdminUsersScreen.jsx'
 import WelcomeScreen from './screens/WelcomeScreen.jsx'
 import { useAuth } from './context/AuthContext.jsx'
@@ -168,6 +169,7 @@ export default function App() {
   const initialPath = startParam?.startsWith('chat_') ? `/events/${startParam.slice('chat_'.length)}/chat`
     : startParam?.startsWith('event_') ? `/events/${startParam.slice('event_'.length)}`
     : startParam?.startsWith('user_') ? `/users/${startParam.slice('user_'.length)}`
+    : startParam === 'profile' ? '/profile'
     : '/'
 
   return (
@@ -192,6 +194,7 @@ export default function App() {
         <Route path="/admin/funny-statuses" element={<AdminOnly><AdminFunnyStatusesScreen /></AdminOnly>} />
         <Route path="/admin/gifts" element={<AdminOnly><AdminGiftsScreen /></AdminOnly>} />
         <Route path="/admin/reports" element={<AdminOnly><AdminReportsScreen /></AdminOnly>} />
+        <Route path="/admin/verification" element={<AdminOnly><AdminVerificationScreen /></AdminOnly>} />
         <Route path="/admin/users" element={<AdminOnly><AdminUsersScreen /></AdminOnly>} />
       </Routes>
     </MemoryRouter>

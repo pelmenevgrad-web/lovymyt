@@ -580,6 +580,66 @@ app.post('/users/:id/reports', requireAuth, async (req, res) => {
   res.status(201).json({ ok: true })
 })
 
+// Latest verification request the caller has filed, if any — lets the
+// profile screen show "На розгляді" / "Відхилено: …" instead of the submit
+// button once they've already applied.
+app.get('/users/me/verification', requireAuth, async (req, res) => {
+  const { data, error } = await supabase
+    .from('verification_requests')
+    .select('id, status, note, reject_reason, created_at')
+    .eq('user_id', req.auth.sub)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('Fetching verification request failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load verification status' })
+  }
+  res.json({ request: data })
+})
+
+// Apply for the verified badge — a selfie-style photo plus an optional note,
+// queued for admin review. Blocks a second application while one is pending.
+app.post('/users/me/verification', requireAuth, async (req, res) => {
+  const { data: user } = await supabase.from('users').select('is_verified').eq('id', req.auth.sub).single()
+  if (user?.is_verified) {
+    return res.status(400).json({ error: 'Ти вже верифікований(-а)' })
+  }
+
+  const { data: pending } = await supabase
+    .from('verification_requests')
+    .select('id')
+    .eq('user_id', req.auth.sub)
+    .eq('status', 'pending')
+    .maybeSingle()
+  if (pending) {
+    return res.status(400).json({ error: 'Заявка вже на розгляді' })
+  }
+
+  const photo = req.body?.photo
+  if (!photo) {
+    return res.status(400).json({ error: 'Додай фото' })
+  }
+
+  try {
+    const photo_url = await uploadImageDataUrl(photo, 'chat-images', `verification/${req.auth.sub}`)
+    const { data, error } = await supabase
+      .from('verification_requests')
+      .insert({ user_id: req.auth.sub, photo_url, note: req.body?.note?.trim() || null })
+      .select()
+      .single()
+    if (error) throw error
+    res.status(201).json({ request: data })
+  } catch (err) {
+    if (err instanceof ImageUploadError) {
+      return res.status(400).json({ error: err.message })
+    }
+    console.error('Submitting verification request failed:', err.message)
+    res.status(500).json({ error: 'Failed to submit request' })
+  }
+})
+
 const EVENT_SELECT = '*, creator:users!events_creator_id_fkey(first_name, avatar_url, is_pro), participants:event_participants(status, user:users(id, first_name, avatar_url)), categoryLinks:event_categories(category_id)'
 
 // Shapes a DB row (with embedded creator/participants) into the flat object
@@ -1692,7 +1752,7 @@ app.get('/admin/stats', requireAdmin, async (_req, res) => {
   const [
     total_users, banned_users, total_events, planned_events, gathering_events,
     active_events, completed_events, cancelled_events, total_reports, total_reviews,
-    pending_user_reports,
+    pending_user_reports, pending_verification_requests,
   ] = await Promise.all([
     count('users'),
     count('users', (q) => q.eq('is_banned', true)),
@@ -1705,12 +1765,13 @@ app.get('/admin/stats', requireAdmin, async (_req, res) => {
     count('event_reports'),
     count('reviews'),
     count('reports', (q) => q.eq('status', 'pending')),
+    count('verification_requests', (q) => q.eq('status', 'pending')),
   ])
 
   res.json({
     total_users, banned_users, total_events,
     events_by_status: { planned: planned_events, gathering: gathering_events, active: active_events, completed: completed_events, cancelled: cancelled_events },
-    total_reports, total_reviews, pending_user_reports,
+    total_reports, total_reviews, pending_user_reports, pending_verification_requests,
   })
 })
 
@@ -1865,6 +1926,80 @@ app.patch('/admin/reports/:id', requireAdmin, async (req, res) => {
     return res.status(500).json({ error: 'Failed to update report' })
   }
   res.json({ report: data })
+})
+
+app.get('/admin/verification-requests', requireAdmin, async (req, res) => {
+  let query = supabase
+    .from('verification_requests')
+    .select('id, photo_url, note, status, reject_reason, created_at, user:users!verification_requests_user_id_fkey(id, first_name, avatar_url, telegram_id, is_verified)')
+    .order('created_at', { ascending: false })
+
+  if (req.query.status) query = query.eq('status', req.query.status)
+
+  const { data, error } = await query
+  if (error) {
+    console.error('Fetching verification requests failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load verification requests' })
+  }
+  res.json({ requests: data })
+})
+
+app.post('/admin/verification-requests/:id/approve', requireAdmin, async (req, res) => {
+  const { data: request, error: fetchErr } = await supabase
+    .from('verification_requests').select('user_id').eq('id', req.params.id).single()
+  if (fetchErr || !request) {
+    return res.status(404).json({ error: 'Request not found' })
+  }
+
+  const { error: userErr } = await supabase.from('users').update({ is_verified: true }).eq('id', request.user_id)
+  if (userErr) {
+    console.error('Approving verification failed:', userErr.message)
+    return res.status(500).json({ error: 'Failed to approve request' })
+  }
+  const { data, error } = await supabase
+    .from('verification_requests')
+    .update({ status: 'approved', reviewed_by: req.auth.sub, reviewed_at: new Date().toISOString() })
+    .eq('id', req.params.id)
+    .select()
+    .single()
+  if (error) {
+    console.error('Updating verification request failed:', error.message)
+    return res.status(500).json({ error: 'Failed to approve request' })
+  }
+
+  const { data: user } = await supabase.from('users').select('telegram_id').eq('id', request.user_id).single()
+  notifyUser(user?.telegram_id, '✅ Тебе верифіковано! Значок з\'явився у профілі.', 'profile', 'Відкрити профіль').catch(() => {})
+
+  res.json({ request: data })
+})
+
+app.post('/admin/verification-requests/:id/reject', requireAdmin, async (req, res) => {
+  const reason = req.body?.reason?.trim()
+  if (!reason) {
+    return res.status(400).json({ error: 'Опиши причину відхилення' })
+  }
+
+  const { data: request, error: fetchErr } = await supabase
+    .from('verification_requests').select('user_id').eq('id', req.params.id).single()
+  if (fetchErr || !request) {
+    return res.status(404).json({ error: 'Request not found' })
+  }
+
+  const { data, error } = await supabase
+    .from('verification_requests')
+    .update({ status: 'rejected', reject_reason: reason, reviewed_by: req.auth.sub, reviewed_at: new Date().toISOString() })
+    .eq('id', req.params.id)
+    .select()
+    .single()
+  if (error) {
+    console.error('Rejecting verification request failed:', error.message)
+    return res.status(500).json({ error: 'Failed to reject request' })
+  }
+
+  const { data: user } = await supabase.from('users').select('telegram_id').eq('id', request.user_id).single()
+  notifyUser(user?.telegram_id, `❌ Заявку на верифікацію відхилено.\nПричина: ${reason}`, 'profile', 'Відкрити профіль').catch(() => {})
+
+  res.json({ request: data })
 })
 
 app.get('/admin/users', requireAdmin, async (_req, res) => {
