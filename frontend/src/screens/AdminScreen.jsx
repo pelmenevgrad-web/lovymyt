@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutGrid, Smile, Users, Loader2, Gift, Flag, BadgeCheck } from 'lucide-react'
+import { LayoutGrid, Smile, Users, Loader2, Gift, Flag, BadgeCheck, Star } from 'lucide-react'
 import BackButton from '../components/BackButton.jsx'
 import { apiFetch } from '../lib/api.js'
 
@@ -77,6 +77,7 @@ export default function AdminScreen() {
           <NavRow Icon={Gift} label="Подарунки" onClick={() => navigate('/admin/gifts')} />
           <NavRow Icon={Flag} label="Скарги" badge={stats?.pending_user_reports} onClick={() => navigate('/admin/reports')} />
           <NavRow Icon={BadgeCheck} label="Верифікація" badge={stats?.pending_verification_requests} onClick={() => navigate('/admin/verification')} />
+          <NavRow Icon={Star} label="Stars-платежі" onClick={() => navigate('/admin/stars')} />
           <NavRow Icon={Users} label="Користувачі / бан" onClick={() => navigate('/admin/users')} />
         </div>
       </div>

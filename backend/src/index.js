@@ -2025,6 +2025,88 @@ app.post('/admin/verification-requests/:id/reject', requireAdmin, async (req, re
   res.json({ request: data })
 })
 
+// Only topup/pro_purchase carry a real Telegram charge id — gift_sent/
+// gift_received are internal wallet transfers with nothing to refund.
+app.get('/admin/stars-transactions', requireAdmin, async (req, res) => {
+  let query = supabase
+    .from('stars_transactions')
+    .select('id, type, amount, telegram_payment_charge_id, refunded_at, created_at, user:users!stars_transactions_user_id_fkey(id, first_name, avatar_url, telegram_id)')
+    .in('type', ['topup', 'pro_purchase'])
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  if (req.query.type) query = query.eq('type', req.query.type)
+
+  const { data, error } = await query
+  if (error) {
+    console.error('Fetching stars transactions failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load transactions' })
+  }
+  res.json({ transactions: data })
+})
+
+app.post('/admin/stars-transactions/:id/refund', requireAdmin, async (req, res) => {
+  const { data: tx, error: txErr } = await supabase
+    .from('stars_transactions')
+    .select('id, type, amount, telegram_payment_charge_id, refunded_at, user_id')
+    .eq('id', req.params.id)
+    .single()
+  if (txErr || !tx) {
+    return res.status(404).json({ error: 'Transaction not found' })
+  }
+  if (tx.refunded_at) {
+    return res.status(400).json({ error: 'Вже повернуто' })
+  }
+  if (!tx.telegram_payment_charge_id) {
+    return res.status(400).json({ error: 'Ця транзакція не має платежу Telegram для повернення' })
+  }
+
+  const { data: user, error: userErr } = await supabase
+    .from('users')
+    .select('telegram_id, stars_balance, is_pro, pro_expires_at, first_name')
+    .eq('id', tx.user_id)
+    .single()
+  if (userErr || !user) {
+    return res.status(404).json({ error: 'User not found' })
+  }
+
+  try {
+    await bot.telegram.callApi('refundStarPayment', {
+      user_id: user.telegram_id,
+      telegram_payment_charge_id: tx.telegram_payment_charge_id,
+    })
+  } catch (err) {
+    console.error('Telegram refund failed:', err.message)
+    return res.status(400).json({ error: `Telegram відхилив повернення: ${err.message}` })
+  }
+
+  if (tx.type === 'topup') {
+    await supabase.from('users').update({ stars_balance: Math.max(0, user.stars_balance - tx.amount) }).eq('id', tx.user_id)
+  } else if (tx.type === 'pro_purchase') {
+    const rolledBack = isProActive(user) ? new Date(new Date(user.pro_expires_at).getTime() - PRO_DURATION_DAYS * 86_400_000) : null
+    if (rolledBack && rolledBack > new Date()) {
+      await supabase.from('users').update({ pro_expires_at: rolledBack.toISOString() }).eq('id', tx.user_id)
+    } else {
+      await supabase.from('users').update({ is_pro: false, pro_expires_at: null }).eq('id', tx.user_id)
+    }
+  }
+
+  const { data: updated, error: updateErr } = await supabase
+    .from('stars_transactions')
+    .update({ refunded_at: new Date().toISOString() })
+    .eq('id', req.params.id)
+    .select()
+    .single()
+  if (updateErr) {
+    console.error('Marking transaction refunded failed:', updateErr.message)
+    return res.status(500).json({ error: 'Refund processed but failed to record it — check manually' })
+  }
+
+  notifyUser(user.telegram_id, `↩️ Тобі повернуто ${tx.amount} Stars за оплату в ЛовиМить.`).catch(() => {})
+
+  res.json({ transaction: updated })
+})
+
 app.get('/admin/users', requireAdmin, async (_req, res) => {
   const { data, error } = await supabase
     .from('users')

@@ -22,6 +22,7 @@ import AdminFunnyStatusesScreen from './screens/AdminFunnyStatusesScreen.jsx'
 import AdminGiftsScreen from './screens/AdminGiftsScreen.jsx'
 import AdminReportsScreen from './screens/AdminReportsScreen.jsx'
 import AdminVerificationScreen from './screens/AdminVerificationScreen.jsx'
+import AdminStarsScreen from './screens/AdminStarsScreen.jsx'
 import AdminUsersScreen from './screens/AdminUsersScreen.jsx'
 import WelcomeScreen from './screens/WelcomeScreen.jsx'
 import { useAuth } from './context/AuthContext.jsx'
@@ -195,6 +196,7 @@ export default function App() {
         <Route path="/admin/gifts" element={<AdminOnly><AdminGiftsScreen /></AdminOnly>} />
         <Route path="/admin/reports" element={<AdminOnly><AdminReportsScreen /></AdminOnly>} />
         <Route path="/admin/verification" element={<AdminOnly><AdminVerificationScreen /></AdminOnly>} />
+        <Route path="/admin/stars" element={<AdminOnly><AdminStarsScreen /></AdminOnly>} />
         <Route path="/admin/users" element={<AdminOnly><AdminUsersScreen /></AdminOnly>} />
       </Routes>
       <BottomNav />
