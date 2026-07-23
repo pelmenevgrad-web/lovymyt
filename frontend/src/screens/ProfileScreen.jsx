@@ -55,7 +55,7 @@ function CenteredMessage({ icon: Icon, title, text }) {
   return (
     <div className="page" style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      gap: 10, minHeight: '60vh', padding: '0 32px', textAlign: 'center',
+      gap: 10, minHeight: '60vh', paddingLeft: 32, paddingRight: 32, textAlign: 'center',
     }}>
       <Icon size={28} color="var(--text-3)" />
       <div style={{ fontWeight: 700, fontSize: 15 }}>{title}</div>

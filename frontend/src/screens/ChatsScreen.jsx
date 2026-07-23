@@ -89,7 +89,7 @@ export default function ChatsScreen() {
   }
 
   return (
-    <div className="page" style={{ padding: '20px 16px 0' }}>
+    <div className="page" style={{ paddingTop: 20, paddingLeft: 16, paddingRight: 16 }}>
       <div style={{ fontWeight: 800, fontSize: 20, marginBottom: 16 }}>Чати</div>
 
       {chats.length === 0 ? (

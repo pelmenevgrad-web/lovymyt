@@ -222,7 +222,7 @@ export default function CreateScreen() {
     return (
       <div className="page" style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        gap: 10, minHeight: '60vh', padding: '0 32px', textAlign: 'center',
+        gap: 10, minHeight: '60vh', paddingLeft: 32, paddingRight: 32, textAlign: 'center',
       }}>
         <div style={{ fontWeight: 700, fontSize: 15 }}>{loadError}</div>
       </div>
