@@ -58,7 +58,7 @@ async function notifyUser(telegramId, text, startParam, buttonLabel = 'Відк�
 async function notifyEventPeople(eventId, excludeUserId, textBuilder, startParam = `event_${eventId}`, buttonLabel) {
   const { data: event } = await supabase
     .from('events')
-    .select('title, creator_id, creator:users(telegram_id)')
+    .select('title, creator_id, creator:users!events_creator_id_fkey(telegram_id)')
     .eq('id', eventId)
     .single()
   if (!event) return
@@ -322,7 +322,7 @@ app.get('/funny-statuses', async (_req, res) => {
   res.json({ funny_statuses: data })
 })
 
-const EVENT_SELECT = '*, creator:users(first_name, avatar_url), participants:event_participants(status, user:users(id, first_name, avatar_url))'
+const EVENT_SELECT = '*, creator:users!events_creator_id_fkey(first_name, avatar_url), participants:event_participants(status, user:users(id, first_name, avatar_url))'
 
 // Shapes a DB row (with embedded creator/participants) into the flat object
 // shape the frontend already works with (same fields as the old mocks).
@@ -722,7 +722,7 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
 app.get('/events/:id/participants', async (req, res) => {
   const { data: event, error: eventErr } = await supabase
     .from('events')
-    .select('creator_id, creator:users(id, first_name, avatar_url)')
+    .select('creator_id, creator:users!events_creator_id_fkey(id, first_name, avatar_url)')
     .eq('id', req.params.id)
     .single()
 
