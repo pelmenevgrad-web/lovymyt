@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Star, BadgeCheck, Loader2, AlertTriangle, Gift } from 'lucide-react'
+import { Star, BadgeCheck, Loader2, AlertTriangle, Gift, Flag } from 'lucide-react'
 import { Avatar } from '../components/EventCard.jsx'
 import BackButton from '../components/BackButton.jsx'
 import ReviewsList from '../components/ReviewsList.jsx'
 import GiftsReceived from '../components/GiftsReceived.jsx'
 import GiftSheet from '../components/GiftSheet.jsx'
+import ReportSheet from '../components/ReportSheet.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 
@@ -48,6 +49,7 @@ export default function PublicProfileScreen() {
   const [user, setUser] = useState(null)
   const [status, setStatus] = useState('pending') // pending | ok | error
   const [showGift, setShowGift] = useState(false)
+  const [showReport, setShowReport] = useState(false)
 
   useEffect(() => {
     apiFetch(`/users/${id}`)
@@ -84,8 +86,21 @@ export default function PublicProfileScreen() {
         borderRadius: '0 0 28px 28px',
         position: 'relative',
       }}>
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'space-between' }}>
           <BackButton />
+          {me && me.id !== id && (
+            <button
+              onClick={() => setShowReport(true)}
+              title="Поскаржитись"
+              style={{
+                width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+                background: 'rgba(255,255,255,.2)', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff',
+              }}
+            >
+              <Flag size={17} />
+            </button>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14 }}>
@@ -173,6 +188,10 @@ export default function PublicProfileScreen() {
           onClose={() => setShowGift(false)}
           onBalanceChange={(stars_balance) => updateMe({ stars_balance })}
         />
+      )}
+
+      {showReport && (
+        <ReportSheet userId={user.id} onClose={() => setShowReport(false)} />
       )}
     </div>
   )

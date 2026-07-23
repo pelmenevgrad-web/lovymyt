@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutGrid, Smile, Users, Loader2, Gift } from 'lucide-react'
+import { LayoutGrid, Smile, Users, Loader2, Gift, Flag } from 'lucide-react'
 import BackButton from '../components/BackButton.jsx'
 import { apiFetch } from '../lib/api.js'
 
@@ -13,7 +13,7 @@ function StatBox({ value, label }) {
   )
 }
 
-function NavRow({ Icon, label, onClick }) {
+function NavRow({ Icon, label, badge, onClick }) {
   return (
     <div
       className="card"
@@ -22,6 +22,9 @@ function NavRow({ Icon, label, onClick }) {
     >
       <Icon size={20} color="var(--accent)" />
       <span style={{ flex: 1, fontWeight: 700, fontSize: 14 }}>{label}</span>
+      {!!badge && (
+        <span className="badge" style={{ background: 'var(--red-light)', color: 'var(--red)' }}>{badge}</span>
+      )}
       <span style={{ fontSize: 18, color: 'var(--text-3)' }}>›</span>
     </div>
   )
@@ -72,6 +75,7 @@ export default function AdminScreen() {
           <NavRow Icon={LayoutGrid} label="Категорії" onClick={() => navigate('/admin/categories')} />
           <NavRow Icon={Smile} label="Смішні статуси" onClick={() => navigate('/admin/funny-statuses')} />
           <NavRow Icon={Gift} label="Подарунки" onClick={() => navigate('/admin/gifts')} />
+          <NavRow Icon={Flag} label="Скарги" badge={stats?.pending_user_reports} onClick={() => navigate('/admin/reports')} />
           <NavRow Icon={Users} label="Користувачі / бан" onClick={() => navigate('/admin/users')} />
         </div>
       </div>

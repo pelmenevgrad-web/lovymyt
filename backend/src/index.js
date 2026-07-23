@@ -550,6 +550,36 @@ app.post('/users/:id/gifts', requireAuth, async (req, res) => {
   res.status(201).json({ ok: true, stars_balance: sender.stars_balance - gift.price_stars })
 })
 
+// Complain about another user (harassment, no-show, inappropriate behavior…) —
+// distinct from event_reports (post-event photo/comment recaps) despite the
+// similar name. Optionally tied to the event where it happened.
+app.post('/users/:id/reports', requireAuth, async (req, res) => {
+  if (req.params.id === req.auth.sub) {
+    return res.status(400).json({ error: 'Не можна поскаржитися на себе' })
+  }
+
+  const reason = req.body?.reason?.trim()
+  if (!reason) {
+    return res.status(400).json({ error: 'Опиши причину скарги' })
+  }
+
+  const { data: target, error: targetErr } = await supabase.from('users').select('id').eq('id', req.params.id).single()
+  if (targetErr || !target) {
+    return res.status(404).json({ error: 'User not found' })
+  }
+
+  const eventId = req.body?.event_id || null
+  const { error } = await supabase.from('reports').insert({
+    from_user_id: req.auth.sub, target_user_id: req.params.id, event_id: eventId, reason,
+  })
+  if (error) {
+    console.error('Submitting report failed:', error.message)
+    return res.status(500).json({ error: 'Failed to submit report' })
+  }
+
+  res.status(201).json({ ok: true })
+})
+
 const EVENT_SELECT = '*, creator:users!events_creator_id_fkey(first_name, avatar_url, is_pro), participants:event_participants(status, user:users(id, first_name, avatar_url)), categoryLinks:event_categories(category_id)'
 
 // Shapes a DB row (with embedded creator/participants) into the flat object
@@ -1662,6 +1692,7 @@ app.get('/admin/stats', requireAdmin, async (_req, res) => {
   const [
     total_users, banned_users, total_events, planned_events, gathering_events,
     active_events, completed_events, cancelled_events, total_reports, total_reviews,
+    pending_user_reports,
   ] = await Promise.all([
     count('users'),
     count('users', (q) => q.eq('is_banned', true)),
@@ -1673,12 +1704,13 @@ app.get('/admin/stats', requireAdmin, async (_req, res) => {
     count('events', (q) => q.eq('status', 'cancelled')),
     count('event_reports'),
     count('reviews'),
+    count('reports', (q) => q.eq('status', 'pending')),
   ])
 
   res.json({
     total_users, banned_users, total_events,
     events_by_status: { planned: planned_events, gathering: gathering_events, active: active_events, completed: completed_events, cancelled: cancelled_events },
-    total_reports, total_reviews,
+    total_reports, total_reviews, pending_user_reports,
   })
 })
 
@@ -1803,6 +1835,36 @@ app.patch('/admin/gifts/:id', requireAdmin, async (req, res) => {
     return res.status(500).json({ error: 'Failed to update gift' })
   }
   res.json({ gift: data })
+})
+
+app.get('/admin/reports', requireAdmin, async (req, res) => {
+  let query = supabase
+    .from('reports')
+    .select('id, reason, status, created_at, from_user:users!reports_from_user_id_fkey(id, first_name, avatar_url), target_user:users!reports_target_user_id_fkey(id, first_name, avatar_url, is_banned), event:events(id, title)')
+    .order('created_at', { ascending: false })
+
+  if (req.query.status) query = query.eq('status', req.query.status)
+
+  const { data, error } = await query
+  if (error) {
+    console.error('Fetching reports failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load reports' })
+  }
+  res.json({ reports: data })
+})
+
+app.patch('/admin/reports/:id', requireAdmin, async (req, res) => {
+  const { status } = req.body ?? {}
+  if (!['pending', 'reviewed', 'dismissed'].includes(status)) {
+    return res.status(400).json({ error: 'status must be "pending", "reviewed" or "dismissed"' })
+  }
+
+  const { data, error } = await supabase.from('reports').update({ status }).eq('id', req.params.id).select().single()
+  if (error) {
+    console.error('Updating report failed:', error.message)
+    return res.status(500).json({ error: 'Failed to update report' })
+  }
+  res.json({ report: data })
 })
 
 app.get('/admin/users', requireAdmin, async (_req, res) => {
