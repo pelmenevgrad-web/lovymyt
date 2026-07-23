@@ -21,6 +21,41 @@ function Avatar({ name, url, size = 36 }) {
 
 export { Avatar }
 
+// Small colored pill per category (icon on a lighter inset circle, like the
+// map pin's icon-on-color treatment) — used wherever an event's full
+// category set needs to be shown, not just its primary one.
+export function CategoryBadges({ ids, categories }) {
+  if (!ids || ids.length === 0) return null
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+      {ids.map(id => {
+        const cat = categories.find(c => c.id === id)
+        if (!cat) return null
+        return (
+          <span
+            key={id}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              background: cat.color, color: '#fff',
+              padding: '2px 8px 2px 2px', borderRadius: 999,
+              fontSize: 11, fontWeight: 700, flexShrink: 0,
+            }}
+          >
+            <span style={{
+              width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+              background: 'rgba(255,255,255,.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <cat.Icon size={10} />
+            </span>
+            {cat.name}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
 export function AvatarStack({ people, size = 18 }) {
   if (!people || people.length === 0) return null
   return (
@@ -45,10 +80,7 @@ export default function EventCard({ event, onClick, compact = false }) {
   const cat    = categories.find(c => c.id === event.category_id) ?? categories[0]
   const status = STATUS_META[event.status] ?? STATUS_META.planned
   const pct    = Math.round((event.current_participants / event.max_participants) * 100)
-  const categoryNames = (event.category_ids ?? [event.category_id])
-    .map(id => categories.find(c => c.id === id)?.name)
-    .filter(Boolean)
-    .join(', ')
+  const categoryIds = event.category_ids ?? [event.category_id]
 
   return (
     <div
@@ -93,11 +125,9 @@ export default function EventCard({ event, onClick, compact = false }) {
           <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {event.title}
           </div>
-          {categoryNames && (
-            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {categoryNames}
-            </div>
-          )}
+          <div style={{ marginTop: 4 }}>
+            <CategoryBadges ids={categoryIds} categories={categories} />
+          </div>
         </div>
       </div>
 
