@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Star, BadgeCheck, Loader2, AlertTriangle } from 'lucide-react'
+import { Star, BadgeCheck, Loader2, AlertTriangle, Gift } from 'lucide-react'
 import { Avatar } from '../components/EventCard.jsx'
 import BackButton from '../components/BackButton.jsx'
 import ReviewsList from '../components/ReviewsList.jsx'
+import GiftsReceived from '../components/GiftsReceived.jsx'
+import GiftSheet from '../components/GiftSheet.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 
 function Stars({ rating }) {
@@ -41,8 +44,10 @@ function StatBlock({ value, label, onClick }) {
 export default function PublicProfileScreen() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user: me, updateUser: updateMe } = useAuth()
   const [user, setUser] = useState(null)
   const [status, setStatus] = useState('pending') // pending | ok | error
+  const [showGift, setShowGift] = useState(false)
 
   useEffect(() => {
     apiFetch(`/users/${id}`)
@@ -126,6 +131,19 @@ export default function PublicProfileScreen() {
         </div>
       </div>
 
+      {/* Gift */}
+      {me && me.id !== user.id && (
+        <div style={{ margin: '16px 16px 0' }}>
+          <button
+            className="btn btn-primary"
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            onClick={() => setShowGift(true)}
+          >
+            <Gift size={16} /> Подарувати
+          </button>
+        </div>
+      )}
+
       {/* Bio */}
       {user.bio && (
         <div style={{ margin: '16px 16px 0' }} className="card">
@@ -136,6 +154,8 @@ export default function PublicProfileScreen() {
         </div>
       )}
 
+      <GiftsReceived userId={user.id} />
+
       {/* Reviews */}
       <div style={{ padding: '20px 16px 0' }}>
         <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 12 }}>
@@ -145,6 +165,15 @@ export default function PublicProfileScreen() {
       </div>
 
       <div style={{ height: 20 }} />
+
+      {showGift && (
+        <GiftSheet
+          userId={user.id}
+          myBalance={me?.stars_balance ?? 0}
+          onClose={() => setShowGift(false)}
+          onBalanceChange={(stars_balance) => updateMe({ stars_balance })}
+        />
+      )}
     </div>
   )
 }

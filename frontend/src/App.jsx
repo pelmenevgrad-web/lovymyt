@@ -19,6 +19,7 @@ import UserArchiveScreen from './screens/UserArchiveScreen.jsx'
 import AdminScreen from './screens/AdminScreen.jsx'
 import AdminCategoriesScreen from './screens/AdminCategoriesScreen.jsx'
 import AdminFunnyStatusesScreen from './screens/AdminFunnyStatusesScreen.jsx'
+import AdminGiftsScreen from './screens/AdminGiftsScreen.jsx'
 import AdminUsersScreen from './screens/AdminUsersScreen.jsx'
 import WelcomeScreen from './screens/WelcomeScreen.jsx'
 import { useAuth } from './context/AuthContext.jsx'
@@ -160,11 +161,12 @@ export default function App() {
     return <WelcomeScreen onJoin={handleJoin} />
   }
 
-  // Invite/notification links open as https://t.me/lovymyt_bot?startapp=event_<uuid>
-  // or chat_<uuid> — land straight on that event or its chat instead of the map.
+  // Invite/notification links open as https://t.me/lovymyt_bot?startapp=event_<uuid>,
+  // chat_<uuid> or user_<uuid> — land straight on that event/chat/profile instead of the map.
   const startParam = WebApp.initDataUnsafe?.start_param
   const initialPath = startParam?.startsWith('chat_') ? `/events/${startParam.slice('chat_'.length)}/chat`
     : startParam?.startsWith('event_') ? `/events/${startParam.slice('event_'.length)}`
+    : startParam?.startsWith('user_') ? `/users/${startParam.slice('user_'.length)}`
     : '/'
 
   return (
@@ -187,6 +189,7 @@ export default function App() {
         <Route path="/admin" element={<AdminOnly><AdminScreen /></AdminOnly>} />
         <Route path="/admin/categories" element={<AdminOnly><AdminCategoriesScreen /></AdminOnly>} />
         <Route path="/admin/funny-statuses" element={<AdminOnly><AdminFunnyStatusesScreen /></AdminOnly>} />
+        <Route path="/admin/gifts" element={<AdminOnly><AdminGiftsScreen /></AdminOnly>} />
         <Route path="/admin/users" element={<AdminOnly><AdminUsersScreen /></AdminOnly>} />
       </Routes>
     </MemoryRouter>

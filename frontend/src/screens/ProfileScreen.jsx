@@ -1,97 +1,20 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import WebApp from '@twa-dev/sdk'
-import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History, ShieldEllipsis, X } from 'lucide-react'
+import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History, ShieldEllipsis } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/EventCard.jsx'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
 import { apiFetch } from '../lib/api.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
 import ReviewsList from '../components/ReviewsList.jsx'
+import GiftsReceived from '../components/GiftsReceived.jsx'
+import TopupSheet from '../components/TopupSheet.jsx'
+import { PRO_PRICE_STARS, payInvoice } from '../lib/payments.js'
 
 function shareApp() {
   shareViaTelegram(
     appLink(),
     'Приєднуйся до ЛовиМить — знаходь компанію для спільного дозвілля поруч! 🎉',
-  )
-}
-
-// Must match STARS_TOPUP_PACKAGES / PRO_PRICE_STARS in backend/src/index.js
-const STARS_TOPUP_PACKAGES = [100, 300, 750]
-const PRO_PRICE_STARS = 300
-
-// Opens a Telegram Stars invoice and resolves once the sheet closes —
-// 'paid' means the payment actually went through (webhook already fired by
-// the time openInvoice's callback runs, so refetching /users/me picks it up).
-function payInvoice(invoiceLink) {
-  return new Promise((resolve) => {
-    WebApp.openInvoice(invoiceLink, (status) => resolve(status))
-  })
-}
-
-function TopupSheet({ onClose, onPaid }) {
-  const [payingPackage, setPayingPackage] = useState(null)
-  const [error, setError] = useState(null)
-
-  async function handlePick(amount) {
-    if (payingPackage) return
-    setPayingPackage(amount)
-    setError(null)
-    try {
-      const { invoice_link } = await apiFetch('/stars/topup', {
-        method: 'POST',
-        body: JSON.stringify({ package: amount }),
-      })
-      const status = await payInvoice(invoice_link)
-      if (status === 'paid') {
-        await onPaid()
-        onClose()
-      } else if (status === 'failed') {
-        setError('Оплата не пройшла')
-      }
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setPayingPackage(null)
-    }
-  }
-
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000,
-        display: 'flex', alignItems: 'flex-end',
-      }}
-      onClick={onClose}
-    >
-      <div
-        className="card"
-        style={{ width: '100%', borderRadius: '20px 20px 0 0', padding: 20 }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div style={{ fontWeight: 800, fontSize: 17 }}>Поповнити баланс</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer' }}>
-            <X size={20} />
-          </button>
-        </div>
-        {error && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 10, textAlign: 'center' }}>{error}</div>}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {STARS_TOPUP_PACKAGES.map(amount => (
-            <button
-              key={amount}
-              className="btn btn-primary"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: payingPackage && payingPackage !== amount ? .5 : 1 }}
-              disabled={!!payingPackage}
-              onClick={() => handlePick(amount)}
-            >
-              {payingPackage === amount ? <Loader2 size={16} className="spin" /> : <Star size={16} fill="currentColor" />}
-              {amount} Stars
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -361,6 +284,8 @@ export default function ProfileScreen() {
       {showTopup && (
         <TopupSheet onClose={() => setShowTopup(false)} onPaid={refreshMe} />
       )}
+
+      <GiftsReceived userId={user.id} />
 
       {/* My events */}
       <div style={{ padding: '20px 16px 0' }}>

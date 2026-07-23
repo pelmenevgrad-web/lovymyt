@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutGrid, Smile, Users, Loader2 } from 'lucide-react'
+import { LayoutGrid, Smile, Users, Loader2, Gift } from 'lucide-react'
 import BackButton from '../components/BackButton.jsx'
 import { apiFetch } from '../lib/api.js'
 
@@ -71,6 +71,7 @@ export default function AdminScreen() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <NavRow Icon={LayoutGrid} label="Категорії" onClick={() => navigate('/admin/categories')} />
           <NavRow Icon={Smile} label="Смішні статуси" onClick={() => navigate('/admin/funny-statuses')} />
+          <NavRow Icon={Gift} label="Подарунки" onClick={() => navigate('/admin/gifts')} />
           <NavRow Icon={Users} label="Користувачі / бан" onClick={() => navigate('/admin/users')} />
         </div>
       </div>

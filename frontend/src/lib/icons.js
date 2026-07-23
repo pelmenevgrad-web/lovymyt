@@ -13,7 +13,7 @@ import {
   Ghost, Bug, Sparkle, Feather, Shirt, Glasses, Hand, HeartHandshake, Grape, Church, Landmark,
   Palmtree, Snail, Bone, ChefHat, Utensils, Lightbulb, BadgeDollarSign, Wallet, Banknote, Watch,
   Key, Bell, Volume2, Speaker, Video, Joystick, Axe, Hammer, Shovel, Sprout, TreeDeciduous,
-  CloudSnow, Droplet
+  CloudSnow, Droplet, Gem,
 } from 'lucide-react'
 
 // Named imports (not `import *`) so the bundler can tree-shake — pulling in
@@ -33,7 +33,7 @@ const ICON_MAP = {
   Ghost, Bug, Sparkle, Feather, Shirt, Glasses, Hand, HeartHandshake, Grape, Church, Landmark,
   Palmtree, Snail, Bone, ChefHat, Utensils, Lightbulb, BadgeDollarSign, Wallet, Banknote, Watch,
   Key, Bell, Volume2, Speaker, Video, Joystick, Axe, Hammer, Shovel, Sprout, TreeDeciduous,
-  CloudSnow, Droplet
+  CloudSnow, Droplet, Gem,
 }
 
 // Curated set offered in the admin icon picker, and the lookup categories/

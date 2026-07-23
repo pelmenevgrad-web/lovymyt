@@ -451,6 +451,105 @@ app.get('/funny-statuses', async (_req, res) => {
   res.json({ funny_statuses: data })
 })
 
+// Public catalog of gifts users can send each other with Stars
+app.get('/gifts', async (_req, res) => {
+  const { data, error } = await supabase
+    .from('gifts_catalog')
+    .select('id, name, icon_name, price_stars')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+
+  if (error) {
+    console.error('Fetching gifts catalog failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load gifts' })
+  }
+  res.json({ gifts: data })
+})
+
+// Gifts a given user has received — shown on their profile
+app.get('/users/:id/gifts', async (req, res) => {
+  const { data, error } = await supabase
+    .from('likes_gifts')
+    .select('id, stars_amount, created_at, gift:gifts_catalog(id, name, icon_name), from_user:users!likes_gifts_from_user_id_fkey(id, first_name, avatar_url)')
+    .eq('to_user_id', req.params.id)
+    .eq('type', 'gift')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Fetching received gifts failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load gifts' })
+  }
+  res.json({ gifts: data })
+})
+
+// Send a gift to another user — price_stars moves from the sender's balance
+// straight onto the recipient's (a tip, not a platform fee), so both ends of
+// stars_transactions' gift_sent/gift_received are recorded.
+app.post('/users/:id/gifts', requireAuth, async (req, res) => {
+  if (req.params.id === req.auth.sub) {
+    return res.status(400).json({ error: 'Не можна дарувати подарунок собі' })
+  }
+
+  const { data: gift, error: giftErr } = await supabase
+    .from('gifts_catalog')
+    .select('id, name, price_stars')
+    .eq('id', req.body?.gift_id)
+    .eq('is_active', true)
+    .single()
+  if (giftErr || !gift) {
+    return res.status(404).json({ error: 'Подарунок не знайдено' })
+  }
+
+  const { data: sender, error: senderErr } = await supabase
+    .from('users')
+    .select('stars_balance, first_name')
+    .eq('id', req.auth.sub)
+    .single()
+  if (senderErr || !sender) {
+    return res.status(500).json({ error: 'Failed to load sender' })
+  }
+  if (sender.stars_balance < gift.price_stars) {
+    return res.status(400).json({ error: 'Недостатньо Stars на балансі' })
+  }
+
+  const { data: recipient, error: recipientErr } = await supabase
+    .from('users')
+    .select('stars_balance, telegram_id')
+    .eq('id', req.params.id)
+    .single()
+  if (recipientErr || !recipient) {
+    return res.status(404).json({ error: 'User not found' })
+  }
+
+  const { error: debitErr } = await supabase
+    .from('users').update({ stars_balance: sender.stars_balance - gift.price_stars }).eq('id', req.auth.sub)
+  if (debitErr) {
+    console.error('Debiting gift sender failed:', debitErr.message)
+    return res.status(500).json({ error: 'Failed to send gift' })
+  }
+  const { error: creditErr } = await supabase
+    .from('users').update({ stars_balance: recipient.stars_balance + gift.price_stars }).eq('id', req.params.id)
+  if (creditErr) {
+    // best-effort rollback of the debit above
+    await supabase.from('users').update({ stars_balance: sender.stars_balance }).eq('id', req.auth.sub)
+    console.error('Crediting gift recipient failed:', creditErr.message)
+    return res.status(500).json({ error: 'Failed to send gift' })
+  }
+
+  await supabase.from('likes_gifts').insert({
+    from_user_id: req.auth.sub, to_user_id: req.params.id,
+    type: 'gift', gift_id: gift.id, stars_amount: gift.price_stars,
+  })
+  await supabase.from('stars_transactions').insert([
+    { user_id: req.auth.sub, type: 'gift_sent', amount: -gift.price_stars },
+    { user_id: req.params.id, type: 'gift_received', amount: gift.price_stars },
+  ])
+
+  notifyUser(recipient.telegram_id, `🎁 ${sender.first_name ?? 'Хтось'} подарував(-ла) тобі: ${gift.name}!`, `user_${req.params.id}`, 'Відкрити профіль').catch(() => {})
+
+  res.status(201).json({ ok: true, stars_balance: sender.stars_balance - gift.price_stars })
+})
+
 const EVENT_SELECT = '*, creator:users!events_creator_id_fkey(first_name, avatar_url, is_pro), participants:event_participants(status, user:users(id, first_name, avatar_url)), categoryLinks:event_categories(category_id)'
 
 // Shapes a DB row (with embedded creator/participants) into the flat object
@@ -1578,6 +1677,49 @@ app.patch('/admin/funny-statuses/:id', requireAdmin, async (req, res) => {
     return res.status(500).json({ error: 'Failed to update funny status' })
   }
   res.json({ funny_status: data })
+})
+
+app.get('/admin/gifts', requireAdmin, async (_req, res) => {
+  const { data, error } = await supabase.from('gifts_catalog').select('*').order('sort_order', { ascending: true })
+  if (error) return res.status(500).json({ error: 'Failed to load gifts' })
+  res.json({ gifts: data })
+})
+
+app.post('/admin/gifts', requireAdmin, async (req, res) => {
+  const { name, icon_name, price_stars, sort_order } = req.body ?? {}
+  if (!name?.trim() || !(Number(price_stars) > 0)) {
+    return res.status(400).json({ error: 'name and a positive price_stars are required' })
+  }
+  const { data, error } = await supabase
+    .from('gifts_catalog')
+    .insert({ name: name.trim(), icon_name: icon_name || null, price_stars: Number(price_stars), sort_order: sort_order || 0 })
+    .select()
+    .single()
+  if (error) {
+    console.error('Creating gift failed:', error.message)
+    return res.status(500).json({ error: 'Failed to create gift' })
+  }
+  res.status(201).json({ gift: data })
+})
+
+app.patch('/admin/gifts/:id', requireAdmin, async (req, res) => {
+  const { name, icon_name, price_stars, sort_order, is_active } = req.body ?? {}
+  const patch = {}
+  if (name !== undefined) patch.name = name.trim()
+  if (icon_name !== undefined) patch.icon_name = icon_name
+  if (price_stars !== undefined) {
+    if (!(Number(price_stars) > 0)) return res.status(400).json({ error: 'price_stars must be positive' })
+    patch.price_stars = Number(price_stars)
+  }
+  if (sort_order !== undefined) patch.sort_order = sort_order
+  if (is_active !== undefined) patch.is_active = !!is_active
+
+  const { data, error } = await supabase.from('gifts_catalog').update(patch).eq('id', req.params.id).select().single()
+  if (error) {
+    console.error('Updating gift failed:', error.message)
+    return res.status(500).json({ error: 'Failed to update gift' })
+  }
+  res.json({ gift: data })
 })
 
 app.get('/admin/users', requireAdmin, async (_req, res) => {
