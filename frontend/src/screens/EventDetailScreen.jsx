@@ -274,6 +274,14 @@ export default function EventDetailScreen() {
 
   return (
     <div className="page">
+      {/* Cover photo */}
+      {event.cover_image_url && (
+        <img
+          src={event.cover_image_url} alt=""
+          style={{ width: '100%', height: 180, objectFit: 'cover', display: 'block' }}
+        />
+      )}
+
       {/* Header */}
       <div style={{ padding: '16px 16px 8px', display: 'flex', alignItems: 'center', gap: 12 }}>
         <BackButton />

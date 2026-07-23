@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import WebApp from '@twa-dev/sdk'
-import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Save, Zap, Plus, X, Loader2 } from 'lucide-react'
+import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Save, Zap, Plus, X, Loader2, Camera, Image as ImageIcon } from 'lucide-react'
 import { useCategories } from '../context/CategoriesContext.jsx'
 import { apiFetch } from '../lib/api.js'
+import { compressImage } from '../lib/image.js'
 import BackButton from '../components/BackButton.jsx'
 import LocationSearchPicker from '../components/LocationSearchPicker.jsx'
 
@@ -69,10 +70,12 @@ export default function CreateScreen() {
     late_join_allowed: false,
     conditions: { with_pets: false, with_kids: false, verified_only: false },
     supplies: [],
+    cover_image: null,
   })
 
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
+  const coverInputRef = useRef(null)
 
   const [isDark, setIsDark] = useState(
     document.documentElement.getAttribute('data-theme') === 'dark'
@@ -121,6 +124,7 @@ export default function CreateScreen() {
             with_kids: !!event.conditions?.with_kids,
             verified_only: !!event.conditions?.verified_only,
           },
+          cover_image: event.cover_image_url ?? null,
         }))
       })
       .catch(err => setLoadError(err.message))
@@ -141,6 +145,17 @@ export default function CreateScreen() {
   const removeSupply = (i) => setForm(f => ({
     ...f, supplies: f.supplies.filter((_, idx) => idx !== i),
   }))
+
+  async function handlePickCover(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      set('cover_image', await compressImage(file))
+    } catch {
+      setSubmitError('Не вдалося обробити фото')
+    }
+  }
 
   const canSubmit = form.category_id !== null && form.title.trim() && form.address_text.trim() && form.start_time
 
@@ -172,6 +187,7 @@ export default function CreateScreen() {
           max_female: form.max_female ? Number(form.max_female) : null,
           late_join_allowed: form.late_join_allowed,
           conditions: form.conditions,
+          cover_image: form.cover_image,
         }),
       })
 
@@ -210,6 +226,49 @@ export default function CreateScreen() {
 
   return (
     <div className="page">
+      {/* Cover photo */}
+      <div style={{ position: 'relative' }}>
+        <input ref={coverInputRef} type="file" accept="image/*" hidden onChange={handlePickCover} />
+        <div
+          onClick={() => coverInputRef.current?.click()}
+          style={{
+            height: form.cover_image ? 160 : 90, cursor: 'pointer', position: 'relative',
+            background: form.cover_image ? `url(${form.cover_image}) center/cover no-repeat` : 'var(--card)',
+            borderBottom: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {!form.cover_image && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, color: 'var(--text-3)' }}>
+              <ImageIcon size={22} />
+              <span style={{ fontSize: 12, fontWeight: 600 }}>Додати фото заходу (необов'язково)</span>
+            </div>
+          )}
+          {form.cover_image && (
+            <div style={{
+              position: 'absolute', bottom: 8, right: 8,
+              background: 'rgba(0,0,0,.5)', color: '#fff', borderRadius: 10,
+              padding: '5px 10px', fontSize: 12, fontWeight: 600,
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+            }}>
+              <Camera size={13} /> Змінити
+            </div>
+          )}
+        </div>
+        {form.cover_image && (
+          <button
+            onClick={(e) => { e.stopPropagation(); set('cover_image', null) }}
+            style={{
+              position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: '50%',
+              background: 'rgba(0,0,0,.5)', color: '#fff', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <X size={15} />
+          </button>
+        )}
+      </div>
+
       {/* Header */}
       <div style={{ padding: '16px 16px 8px', display: 'flex', alignItems: 'center', gap: 12 }}>
         <BackButton />

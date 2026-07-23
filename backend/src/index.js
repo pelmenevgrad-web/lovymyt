@@ -334,6 +334,7 @@ function shapeEvent(row) {
     title: row.title,
     category_id: row.category_id,
     status: row.status,
+    cover_image_url: row.cover_image_url ?? null,
     start_time: row.start_time,
     end_time: row.end_time,
     duration_min_hours: row.duration_min_hours,
@@ -434,7 +435,7 @@ app.post('/events', requireAuth, async (req, res) => {
     max_participants, min_participants, budget_type, budget_amount,
     age_min, age_max, late_join_allowed, conditions,
     allowed_gender, max_male, max_female,
-    duration_min_hours, duration_max_hours,
+    duration_min_hours, duration_max_hours, cover_image,
   } = req.body ?? {}
 
   if (!category_id || !title?.trim() || !address_text?.trim() || !start_time || lat == null || lng == null) {
@@ -447,34 +448,42 @@ app.post('/events', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'allowed_gender must be "any", "male" or "female"' })
   }
 
-  const { data: row, error } = await supabase
-    .from('events')
-    .insert({
-      creator_id: req.auth.sub,
-      category_id, title: title.trim(), description: description?.trim() || null,
-      address_text: address_text.trim(),
-      start_time, lat, lng,
-      end_time: computeEndTime(start_time, duration_max_hours),
-      duration_min_hours: duration_min_hours || null,
-      max_participants, min_participants, budget_type,
-      budget_amount: budget_amount || null,
-      age_min: age_min || null, age_max: age_max || null,
-      allowed_gender: allowed_gender || 'any',
-      max_male: max_male || null, max_female: max_female || null,
-      conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
-    })
-    .select(EVENT_SELECT)
-    .single()
+  try {
+    const cover_image_url = await resolveCoverImage(cover_image, req.auth.sub)
 
-  if (error) {
-    console.error('Creating event failed:', error.message)
-    return res.status(500).json({ error: 'Failed to create event' })
+    const { data: row, error } = await supabase
+      .from('events')
+      .insert({
+        creator_id: req.auth.sub,
+        category_id, title: title.trim(), description: description?.trim() || null,
+        address_text: address_text.trim(),
+        start_time, lat, lng,
+        end_time: computeEndTime(start_time, duration_max_hours),
+        duration_min_hours: duration_min_hours || null,
+        max_participants, min_participants, budget_type,
+        budget_amount: budget_amount || null,
+        age_min: age_min || null, age_max: age_max || null,
+        allowed_gender: allowed_gender || 'any',
+        max_male: max_male || null, max_female: max_female || null,
+        conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
+        cover_image_url,
+      })
+      .select(EVENT_SELECT)
+      .single()
+
+    if (error) throw error
+
+    const shaped = shapeEvent(row)
+    notifyAboutNewEvent(shaped, req.auth.sub).catch(() => {})
+
+    res.status(201).json({ event: shaped })
+  } catch (err) {
+    if (err instanceof ImageUploadError) {
+      return res.status(400).json({ error: err.message })
+    }
+    console.error('Creating event failed:', err.message)
+    res.status(500).json({ error: 'Failed to create event' })
   }
-
-  const shaped = shapeEvent(row)
-  notifyAboutNewEvent(shaped, req.auth.sub).catch(() => {})
-
-  res.status(201).json({ event: shaped })
 })
 
 // Edit an event — organizer only
@@ -497,7 +506,7 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
     max_participants, min_participants, budget_type, budget_amount,
     age_min, age_max, late_join_allowed, conditions,
     allowed_gender, max_male, max_female,
-    duration_min_hours, duration_max_hours,
+    duration_min_hours, duration_max_hours, cover_image,
   } = req.body ?? {}
 
   if (!category_id || !title?.trim() || !address_text?.trim() || !start_time || lat == null || lng == null) {
@@ -510,24 +519,35 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'allowed_gender must be "any", "male" or "female"' })
   }
 
-  const { data: row, error } = await supabase
-    .from('events')
-    .update({
-      category_id, title: title.trim(), description: description?.trim() || null,
-      address_text: address_text.trim(),
-      start_time, lat, lng,
-      end_time: computeEndTime(start_time, duration_max_hours),
-      duration_min_hours: duration_min_hours || null,
-      max_participants, min_participants, budget_type,
-      budget_amount: budget_amount || null,
-      age_min: age_min || null, age_max: age_max || null,
-      allowed_gender: allowed_gender || 'any',
-      max_male: max_male || null, max_female: max_female || null,
-      conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
-    })
-    .eq('id', req.params.id)
-    .select(EVENT_SELECT)
-    .single()
+  let row, error
+  try {
+    const cover_image_url = await resolveCoverImage(cover_image, req.auth.sub)
+    ;({ data: row, error } = await supabase
+      .from('events')
+      .update({
+        category_id, title: title.trim(), description: description?.trim() || null,
+        address_text: address_text.trim(),
+        start_time, lat, lng,
+        end_time: computeEndTime(start_time, duration_max_hours),
+        duration_min_hours: duration_min_hours || null,
+        max_participants, min_participants, budget_type,
+        budget_amount: budget_amount || null,
+        age_min: age_min || null, age_max: age_max || null,
+        allowed_gender: allowed_gender || 'any',
+        max_male: max_male || null, max_female: max_female || null,
+        conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
+        cover_image_url,
+      })
+      .eq('id', req.params.id)
+      .select(EVENT_SELECT)
+      .single())
+  } catch (err) {
+    if (err instanceof ImageUploadError) {
+      return res.status(400).json({ error: err.message })
+    }
+    console.error('Updating event failed:', err.message)
+    return res.status(500).json({ error: 'Failed to update event' })
+  }
 
   if (error) {
     console.error('Updating event failed:', error.message)
@@ -1089,6 +1109,17 @@ async function uploadImageDataUrl(dataUrl, bucket, pathPrefix) {
   const { error } = await supabase.storage.from(bucket).upload(path, buffer, { contentType: mime })
   if (error) throw error
   return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl
+}
+
+// Resolves events.cover_image_url from request input: an already-hosted URL
+// (unchanged on edit) passes through, a new data: URL gets uploaded, and
+// null/omitted clears it.
+async function resolveCoverImage(coverImage, userId) {
+  if (!coverImage) return null
+  if (coverImage.startsWith('data:')) {
+    return uploadImageDataUrl(coverImage, 'chat-images', `event-covers/${userId}`)
+  }
+  return coverImage
 }
 
 // Message history for an event's chat
