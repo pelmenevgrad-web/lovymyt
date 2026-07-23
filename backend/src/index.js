@@ -1217,6 +1217,49 @@ app.post('/events/:id/participants/:userId/decline', requireAuth, async (req, re
   res.json({ ok: true })
 })
 
+// A participant backing out themselves — frees their spot for someone else
+// and (unlike an organizer decline) needs no reason. Self-service counterpart
+// to the decline endpoint above.
+app.post('/events/:id/leave', requireAuth, async (req, res) => {
+  const { data: event, error: eventErr } = await supabase
+    .from('events')
+    .select('title, creator_id, status')
+    .eq('id', req.params.id)
+    .single()
+
+  if (eventErr) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  if (event.status === 'completed' || event.status === 'cancelled') {
+    return res.status(400).json({ error: 'Захід вже завершено' })
+  }
+
+  const { data: left, error } = await supabase
+    .from('event_participants')
+    .update({ status: 'left' })
+    .eq('event_id', req.params.id)
+    .eq('user_id', req.auth.sub)
+    .eq('status', 'accepted')
+    .select('id')
+    .maybeSingle()
+
+  if (error) {
+    console.error('Leaving event failed:', error.message)
+    return res.status(500).json({ error: 'Failed to leave event' })
+  }
+  if (!left) {
+    return res.status(400).json({ error: 'Ти не берешь участь у цьому заході' })
+  }
+
+  const { data: me } = await supabase.from('users').select('first_name').eq('id', req.auth.sub).single()
+  notifyEventPeople(
+    req.params.id, req.auth.sub,
+    (title) => `👋 ${me?.first_name ?? 'Учасник'} більше не бере участь у заході «${title}»`,
+  ).catch(() => {})
+
+  res.json({ ok: true })
+})
+
 // Submit ratings/comments for other people who were at the same event.
 // Upserts so re-submitting just edits the earlier review instead of erroring.
 app.post('/events/:id/reviews', requireAuth, async (req, res) => {

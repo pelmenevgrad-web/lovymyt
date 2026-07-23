@@ -156,6 +156,8 @@ export default function EventDetailScreen() {
   const [event, setEvent] = useState(null)
   const [status, setStatus] = useState('pending') // pending | ok | error
   const [joining, setJoining] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+  const [confirmingLeave, setConfirmingLeave] = useState(false)
   const [joinError, setJoinError] = useState(null)
   const [supplies, setSupplies] = useState([])
   const [participants, setParticipants] = useState([])
@@ -233,6 +235,21 @@ export default function EventDetailScreen() {
       setJoinError(err.message)
     } finally {
       setJoining(false)
+    }
+  }
+
+  async function handleLeave() {
+    if (leaving) return
+    setLeaving(true)
+    setJoinError(null)
+    try {
+      await apiFetch(`/events/${id}/leave`, { method: 'POST' })
+      setEvent(e => ({ ...e, my_status: 'left', current_participants: Math.max(0, e.current_participants - 1) }))
+      setConfirmingLeave(false)
+    } catch (err) {
+      setJoinError(err.message)
+    } finally {
+      setLeaving(false)
     }
   }
 
@@ -492,15 +509,37 @@ export default function EventDetailScreen() {
               )
             )}
           </>
+        ) : alreadyJoined && !isEnded ? (
+          confirmingLeave ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn" style={{ flex: 1, background: 'var(--red)', color: '#fff', opacity: leaving ? .6 : 1 }}
+                disabled={leaving} onClick={handleLeave}
+              >
+                {leaving ? 'Виходимо…' : 'Так, скасувати участь'}
+              </button>
+              <button className="btn btn-ghost" style={{ flex: 1 }} disabled={leaving} onClick={() => setConfirmingLeave(false)}>
+                Назад
+              </button>
+            </div>
+          ) : (
+            <button
+              className="btn"
+              style={{ width: '100%', background: 'var(--green-light)', color: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              onClick={() => setConfirmingLeave(true)}
+            >
+              Ви приєднались <Check size={18} />
+            </button>
+          )
         ) : (
           <button
             className="btn btn-primary"
             style={{ width: '100%', opacity: joining || isEnded ? .6 : 1 }}
-            disabled={joining || alreadyJoined || isEnded}
+            disabled={joining || isEnded}
             onClick={handleJoin}
           >
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              {alreadyJoined ? <>Ви приєднались <Check size={18} /></> : joining ? 'Приєднуємось…' : <>Приєднатися <Check size={18} /></>}
+              {joining ? 'Приєднуємось…' : <>Приєднатися <Check size={18} /></>}
             </span>
           </button>
         )}
