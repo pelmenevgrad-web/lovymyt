@@ -22,6 +22,7 @@ export default function EditProfileScreen() {
   const { user, updateUser } = useAuth()
   const [bio, setBio] = useState(user?.bio ?? '')
   const [gender, setGender] = useState(user?.gender ?? null)
+  const [birthDate, setBirthDate] = useState(user?.birth_date ?? '')
   const [notifyAll, setNotifyAll] = useState(!!user?.notify_all_events)
   const [homeAddress, setHomeAddress] = useState('')
   const [homeLat, setHomeLat] = useState(user?.notify_lat ?? KYIV.lat)
@@ -47,7 +48,7 @@ export default function EditProfileScreen() {
       const { user: updated } = await apiFetch('/users/me', {
         method: 'PATCH',
         body: JSON.stringify({
-          bio, gender,
+          bio, gender, birth_date: birthDate || null,
           notify_all_events: notifyAll,
           notify_lat: notifyAll ? null : homeLat,
           notify_lng: notifyAll ? null : homeLng,
@@ -114,6 +115,19 @@ export default function EditProfileScreen() {
             )
           })}
         </div>
+
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: .06, margin: '16px 0 8px' }}>
+          Дата народження
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
+          Потрібна для заходів з віковими обмеженнями — без неї приєднатися до таких не вийде
+        </p>
+        <input
+          type="date"
+          value={birthDate ?? ''}
+          onChange={e => setBirthDate(e.target.value)}
+          max={new Date().toISOString().slice(0, 10)}
+        />
 
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: .06, margin: '16px 0 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
           <Bell size={14} /> Сповіщення про нові заходи

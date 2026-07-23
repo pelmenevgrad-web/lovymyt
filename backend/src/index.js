@@ -302,7 +302,7 @@ async function requireAdmin(req, res, next) {
 
 // Update the authenticated user's own editable profile fields
 app.patch('/users/me', requireAuth, async (req, res) => {
-  const { bio, gender, notify_lat, notify_lng, notify_radius_km, notify_all_events } = req.body ?? {}
+  const { bio, gender, birth_date, notify_lat, notify_lng, notify_radius_km, notify_all_events } = req.body ?? {}
   const patch = {}
 
   if (bio !== undefined) {
@@ -317,6 +317,16 @@ app.patch('/users/me', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'gender must be "male", "female" or null' })
     }
     patch.gender = gender
+  }
+
+  if (birth_date !== undefined) {
+    if (birth_date !== null) {
+      const parsed = new Date(birth_date)
+      if (Number.isNaN(parsed.getTime()) || parsed > new Date()) {
+        return res.status(400).json({ error: 'birth_date must be a valid past date' })
+      }
+    }
+    patch.birth_date = birth_date
   }
 
   if (notify_all_events !== undefined) {
@@ -1040,7 +1050,7 @@ const GENDER_LABEL = { male: 'чоловіків', female: 'жінок' }
 app.post('/events/:id/join', requireAuth, async (req, res) => {
   const { data: event, error: eventErr } = await supabase
     .from('events')
-    .select('creator_id, allowed_gender, max_male, max_female, status')
+    .select('creator_id, allowed_gender, max_male, max_female, status, age_min, age_max')
     .eq('id', req.params.id)
     .single()
 
@@ -1056,13 +1066,26 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
 
   const { data: joiner, error: joinerErr } = await supabase
     .from('users')
-    .select('gender, first_name')
+    .select('gender, first_name, birth_date')
     .eq('id', req.auth.sub)
     .single()
 
   if (joinerErr) {
     console.error('Fetching joiner failed:', joinerErr.message)
     return res.status(500).json({ error: 'Failed to verify user' })
+  }
+
+  if (event.age_min || event.age_max) {
+    if (!joiner.birth_date) {
+      return res.status(403).json({ error: 'Цей захід має вікові обмеження. Вкажи дату народження у профілі, щоб приєднатися.' })
+    }
+    const age = Math.floor((Date.now() - new Date(joiner.birth_date).getTime()) / 31_557_600_000)
+    if (event.age_min && age < event.age_min) {
+      return res.status(403).json({ error: `Цей захід тільки для віку від ${event.age_min} років` })
+    }
+    if (event.age_max && age > event.age_max) {
+      return res.status(403).json({ error: `Цей захід тільки для віку до ${event.age_max} років` })
+    }
   }
 
   if (event.allowed_gender && event.allowed_gender !== 'any') {
