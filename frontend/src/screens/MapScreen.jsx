@@ -39,7 +39,10 @@ function markerAvatarsHtml(people) {
 // needs to sit centered on that same point (no counter-rotation needed).
 // `joinableNow` marks events the creator opted to allow joining after start —
 // shown as a small pulsing badge instead of a full halo around the pin.
-function createMarker(cat, isActive, joinableNow, people) {
+// `extraCategoryCount` (event tagged with more than one category) gets a
+// "+N" pill on the opposite corner, since a second full icon reads as
+// clutter at typical map zoom.
+function createMarker(cat, isActive, joinableNow, people, extraCategoryCount = 0) {
   const body = isActive ? 48 : 40
   const height = Math.round(body * 1.45)
   const centerY = height / 2
@@ -67,6 +70,18 @@ function createMarker(cat, isActive, joinableNow, people) {
             animation:badge-pulse 1.8s ease-out infinite;
             z-index:2;
           "><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${JOIN_BADGE_ICON}</svg></div>
+        ` : ''}
+        ${extraCategoryCount > 0 ? `
+          <div style="
+            position:absolute; left:50%; top:${centerY}px; margin:-${half + 6}px 0 0 -${half + 15}px;
+            min-width:22px; height:18px; padding:0 5px; box-sizing:border-box;
+            border-radius:9px;
+            background:#fff; color:${cat.color}; border:2px solid ${cat.color};
+            display:flex; align-items:center; justify-content:center;
+            font:700 10px/1 -apple-system,sans-serif;
+            box-shadow:0 1px 4px rgba(0,0,0,.3);
+            z-index:2;
+          ">+${extraCategoryCount}</div>
         ` : ''}
         <div style="
           position:absolute; left:50%; top:${centerY}px; margin:-${half}px 0 0 -${half}px;
@@ -195,7 +210,7 @@ export default function MapScreen() {
               <Marker
                 key={event.id}
                 position={[event.lat, event.lng]}
-                icon={createMarker(cat, isActive, joinableNow, event.participant_avatars)}
+                icon={createMarker(cat, isActive, joinableNow, event.participant_avatars, (event.category_ids?.length ?? 1) - 1)}
                 eventHandlers={{ click: () => handleMarkerClick(event) }}
               />
             )
