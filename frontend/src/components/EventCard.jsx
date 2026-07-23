@@ -45,6 +45,10 @@ export default function EventCard({ event, onClick, compact = false }) {
   const cat    = categories.find(c => c.id === event.category_id) ?? categories[0]
   const status = STATUS_META[event.status] ?? STATUS_META.planned
   const pct    = Math.round((event.current_participants / event.max_participants) * 100)
+  const categoryNames = (event.category_ids ?? [event.category_id])
+    .map(id => categories.find(c => c.id === id)?.name)
+    .filter(Boolean)
+    .join(', ')
 
   return (
     <div
@@ -89,6 +93,11 @@ export default function EventCard({ event, onClick, compact = false }) {
           <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {event.title}
           </div>
+          {categoryNames && (
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {categoryNames}
+            </div>
+          )}
         </div>
       </div>
 
