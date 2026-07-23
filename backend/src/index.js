@@ -322,17 +322,19 @@ app.get('/funny-statuses', async (_req, res) => {
   res.json({ funny_statuses: data })
 })
 
-const EVENT_SELECT = '*, creator:users!events_creator_id_fkey(first_name, avatar_url), participants:event_participants(status, user:users(id, first_name, avatar_url))'
+const EVENT_SELECT = '*, creator:users!events_creator_id_fkey(first_name, avatar_url), participants:event_participants(status, user:users(id, first_name, avatar_url)), categoryLinks:event_categories(category_id)'
 
 // Shapes a DB row (with embedded creator/participants) into the flat object
 // shape the frontend already works with (same fields as the old mocks).
 function shapeEvent(row) {
   const { late_join_allowed, ...conditions } = row.conditions ?? {}
   const accepted = (row.participants ?? []).filter(p => p.status === 'accepted' && p.user)
+  const category_ids = (row.categoryLinks ?? []).map(c => c.category_id)
   return {
     id: row.id,
     title: row.title,
     category_id: row.category_id,
+    category_ids: category_ids.length > 0 ? category_ids : (row.category_id ? [row.category_id] : []),
     status: row.status,
     cover_image_url: row.cover_image_url ?? null,
     start_time: row.start_time,
@@ -428,17 +430,33 @@ function computeEndTime(startTime, durationMaxHours) {
   return new Date(new Date(startTime).getTime() + durationMaxHours * 3_600_000).toISOString()
 }
 
+// Validates the category_ids array shared by POST/PATCH /events — an event
+// can now be tagged with more than one category (e.g. picnic + concert).
+function parseCategoryIds(category_ids) {
+  if (!Array.isArray(category_ids) || category_ids.length === 0) return null
+  const ids = category_ids.map(Number).filter(Number.isInteger)
+  return ids.length > 0 ? [...new Set(ids)] : null
+}
+
+// Replaces the full category set for an event (delete + insert is simplest
+// and keeps create/edit using the same logic).
+async function syncEventCategories(eventId, categoryIds) {
+  await supabase.from('event_categories').delete().eq('event_id', eventId)
+  await supabase.from('event_categories').insert(categoryIds.map(category_id => ({ event_id: eventId, category_id })))
+}
+
 // Create a new event owned by the authenticated user
 app.post('/events', requireAuth, async (req, res) => {
   const {
-    category_id, title, description, address_text, start_time, lat, lng,
+    category_ids, title, description, address_text, start_time, lat, lng,
     max_participants, min_participants, budget_type, budget_amount,
     age_min, age_max, late_join_allowed, conditions,
     allowed_gender, max_male, max_female,
     duration_min_hours, duration_max_hours, cover_image,
   } = req.body ?? {}
 
-  if (!category_id || !title?.trim() || !address_text?.trim() || !start_time || lat == null || lng == null) {
+  const categoryIds = parseCategoryIds(category_ids)
+  if (!categoryIds || !title?.trim() || !address_text?.trim() || !start_time || lat == null || lng == null) {
     return res.status(400).json({ error: 'Missing required fields' })
   }
   if (!duration_max_hours || duration_max_hours <= 0) {
@@ -451,11 +469,11 @@ app.post('/events', requireAuth, async (req, res) => {
   try {
     const cover_image_url = await resolveCoverImage(cover_image, req.auth.sub)
 
-    const { data: row, error } = await supabase
+    const { data: created, error } = await supabase
       .from('events')
       .insert({
         creator_id: req.auth.sub,
-        category_id, title: title.trim(), description: description?.trim() || null,
+        category_id: categoryIds[0], title: title.trim(), description: description?.trim() || null,
         address_text: address_text.trim(),
         start_time, lat, lng,
         end_time: computeEndTime(start_time, duration_max_hours),
@@ -468,10 +486,19 @@ app.post('/events', requireAuth, async (req, res) => {
         conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
         cover_image_url,
       })
-      .select(EVENT_SELECT)
+      .select('id')
       .single()
 
     if (error) throw error
+
+    await syncEventCategories(created.id, categoryIds)
+
+    const { data: row, error: refetchErr } = await supabase
+      .from('events')
+      .select(EVENT_SELECT)
+      .eq('id', created.id)
+      .single()
+    if (refetchErr) throw refetchErr
 
     const shaped = shapeEvent(row)
     notifyAboutNewEvent(shaped, req.auth.sub).catch(() => {})
@@ -502,14 +529,15 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
   }
 
   const {
-    category_id, title, description, address_text, start_time, lat, lng,
+    category_ids, title, description, address_text, start_time, lat, lng,
     max_participants, min_participants, budget_type, budget_amount,
     age_min, age_max, late_join_allowed, conditions,
     allowed_gender, max_male, max_female,
     duration_min_hours, duration_max_hours, cover_image,
   } = req.body ?? {}
 
-  if (!category_id || !title?.trim() || !address_text?.trim() || !start_time || lat == null || lng == null) {
+  const categoryIds = parseCategoryIds(category_ids)
+  if (!categoryIds || !title?.trim() || !address_text?.trim() || !start_time || lat == null || lng == null) {
     return res.status(400).json({ error: 'Missing required fields' })
   }
   if (!duration_max_hours || duration_max_hours <= 0) {
@@ -522,10 +550,10 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
   let row, error
   try {
     const cover_image_url = await resolveCoverImage(cover_image, req.auth.sub)
-    ;({ data: row, error } = await supabase
+    const { error: updateErr } = await supabase
       .from('events')
       .update({
-        category_id, title: title.trim(), description: description?.trim() || null,
+        category_id: categoryIds[0], title: title.trim(), description: description?.trim() || null,
         address_text: address_text.trim(),
         start_time, lat, lng,
         end_time: computeEndTime(start_time, duration_max_hours),
@@ -539,7 +567,13 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
         cover_image_url,
       })
       .eq('id', req.params.id)
+    if (updateErr) throw updateErr
+
+    await syncEventCategories(req.params.id, categoryIds)
+    ;({ data: row, error } = await supabase
+      .from('events')
       .select(EVENT_SELECT)
+      .eq('id', req.params.id)
       .single())
   } catch (err) {
     if (err instanceof ImageUploadError) {

@@ -257,6 +257,10 @@ export default function EventDetailScreen() {
   }
 
   const cat = categories.find(c => c.id === event.category_id) ?? categories[0]
+  const eventCategoryNames = (event.category_ids ?? [event.category_id])
+    .map(id => categories.find(c => c.id === id)?.name)
+    .filter(Boolean)
+    .join(', ')
   const statusMeta = STATUS_META[event.status] ?? STATUS_META.planned
   const budget = BUDGET_LABEL[event.budget_type] ?? BUDGET_LABEL.free
   const pct = Math.round((event.current_participants / event.max_participants) * 100)
@@ -329,7 +333,7 @@ export default function EventDetailScreen() {
             <cat.Icon size={24} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 600 }}>{cat.name}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 600 }}>{eventCategoryNames || cat.name}</div>
             <h1 style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.25 }}>{event.title}</h1>
           </div>
           <span className="badge" style={{

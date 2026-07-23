@@ -16,7 +16,7 @@ export default function CategoriesScreen() {
   }, [])
 
   function countFor(categoryId) {
-    return events.filter(e => categoryId === 0 || e.category_id === categoryId).length
+    return events.filter(e => categoryId === 0 || (e.category_ids ?? [e.category_id]).includes(categoryId)).length
   }
 
   return (

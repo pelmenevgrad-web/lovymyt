@@ -146,10 +146,10 @@ export default function MapScreen() {
 
   const filtered = selectedCat === 0
     ? events
-    : events.filter(e => e.category_id === selectedCat)
+    : events.filter(e => (e.category_ids ?? [e.category_id]).includes(selectedCat))
 
   const activeCategories = CATEGORIES.filter(cat =>
-    cat.id === 0 || events.some(e => e.category_id === cat.id)
+    cat.id === 0 || events.some(e => (e.category_ids ?? [e.category_id]).includes(cat.id))
   )
 
   function handleMarkerClick(event) {

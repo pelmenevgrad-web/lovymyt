@@ -49,7 +49,7 @@ export default function CreateScreen() {
   const [loadingEvent, setLoadingEvent] = useState(isEdit)
   const [loadError, setLoadError] = useState(null)
   const [form, setForm] = useState({
-    category_id: null,
+    category_ids: [],
     title: '',
     description: '',
     address_text: '',
@@ -98,7 +98,7 @@ export default function CreateScreen() {
         }
         setForm(f => ({
           ...f,
-          category_id: event.category_id,
+          category_ids: event.category_ids ?? (event.category_id ? [event.category_id] : []),
           title: event.title,
           description: event.description ?? '',
           address_text: event.address_text,
@@ -135,6 +135,11 @@ export default function CreateScreen() {
   const toggleCond = (key) => setForm(f => ({
     ...f, conditions: { ...f.conditions, [key]: !f.conditions[key] }
   }))
+  const toggleCategory = (id) => setForm(f => ({
+    ...f, category_ids: f.category_ids.includes(id)
+      ? f.category_ids.filter(c => c !== id)
+      : [...f.category_ids, id],
+  }))
 
   const addSupply = () => setForm(f => ({
     ...f, supplies: [...f.supplies, { name: '', needed_amount: '', unit: '' }],
@@ -157,7 +162,7 @@ export default function CreateScreen() {
     }
   }
 
-  const canSubmit = form.category_id !== null && form.title.trim() && form.address_text.trim() && form.start_time
+  const canSubmit = form.category_ids.length > 0 && form.title.trim() && form.address_text.trim() && form.start_time
 
   async function handleCreate() {
     if (!canSubmit || submitting) return
@@ -167,7 +172,7 @@ export default function CreateScreen() {
       const { event } = await apiFetch(isEdit ? `/events/${eventId}` : '/events', {
         method: isEdit ? 'PATCH' : 'POST',
         body: JSON.stringify({
-          category_id: form.category_id,
+          category_ids: form.category_ids,
           title: form.title,
           address_text: form.address_text,
           start_time: new Date(form.start_time).toISOString(),
@@ -279,15 +284,15 @@ export default function CreateScreen() {
       </div>
 
       {/* Category */}
-      <Section title="Категорія">
+      <Section title="Категорія (можна декілька)">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {categories.filter(c => c.id !== 0).map(cat => {
-            const active = form.category_id === cat.id
+            const active = form.category_ids.includes(cat.id)
             return (
               <button
                 key={cat.id}
                 className="chip"
-                onClick={() => set('category_id', cat.id)}
+                onClick={() => toggleCategory(cat.id)}
                 style={{
                   background: active ? cat.color : 'var(--card)',
                   color: active ? '#fff' : 'var(--text)',
