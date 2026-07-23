@@ -175,10 +175,10 @@ export default function App() {
   return (
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
-        <Route path="/"           element={<WithNav><MapScreen /></WithNav>} />
-        <Route path="/categories" element={<WithNav><CategoriesScreen /></WithNav>} />
-        <Route path="/chats"      element={<WithNav><ChatsScreen /></WithNav>} />
-        <Route path="/profile"    element={<WithNav><ProfileScreen /></WithNav>} />
+        <Route path="/"           element={<MapScreen />} />
+        <Route path="/categories" element={<CategoriesScreen />} />
+        <Route path="/chats"      element={<ChatsScreen />} />
+        <Route path="/profile"    element={<ProfileScreen />} />
         <Route path="/profile/edit" element={<EditProfileScreen />} />
         <Route path="/create"     element={<CreateScreen />} />
         <Route path="/events/:id" element={<EventDetailScreen />} />
@@ -197,16 +197,8 @@ export default function App() {
         <Route path="/admin/verification" element={<AdminOnly><AdminVerificationScreen /></AdminOnly>} />
         <Route path="/admin/users" element={<AdminOnly><AdminUsersScreen /></AdminOnly>} />
       </Routes>
-    </MemoryRouter>
-  )
-}
-
-function WithNav({ children }) {
-  return (
-    <>
-      {children}
       <BottomNav />
-    </>
+    </MemoryRouter>
   )
 }
 

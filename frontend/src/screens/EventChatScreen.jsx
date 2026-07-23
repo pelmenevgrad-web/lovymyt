@@ -184,7 +184,7 @@ export default function EventChatScreen() {
 
       <div style={{
         display: 'flex', gap: 8, padding: '10px 16px',
-        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
+        paddingBottom: 'calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 10px)',
         borderTop: '1px solid var(--border)', flexShrink: 0,
       }}>
         <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handlePickFile} />
