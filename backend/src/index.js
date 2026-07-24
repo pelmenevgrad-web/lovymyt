@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import crypto from 'crypto'
 import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
@@ -12,6 +13,14 @@ const PORT = process.env.PORT || 3000
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL
 const JWT_SECRET = process.env.JWT_SECRET
+
+// Telegram sends this back on every real webhook call as the
+// X-Telegram-Bot-Api-Secret-Token header, once we register it via
+// setWebhook — derived from BOT_TOKEN (already secret) so there's no new
+// env var to configure. Without this, /webhook accepted *any* POSTed
+// body as if it came from Telegram, letting anyone forge a fake
+// successful_payment update and credit themselves free Stars/PRO.
+const WEBHOOK_SECRET = crypto.createHash('sha256').update(BOT_TOKEN).digest('hex')
 
 const app = express()
 const httpServer = createServer(app)
@@ -212,6 +221,9 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }))
 
 // Telegram webhook
 app.post('/webhook', (req, res) => {
+  if (req.headers['x-telegram-bot-api-secret-token'] !== WEBHOOK_SECRET) {
+    return res.sendStatus(401)
+  }
   bot.handleUpdate(req.body, res)
 })
 
@@ -2619,7 +2631,7 @@ async function start() {
   if (WEBHOOK_URL) {
     const webhookEndpoint = `${WEBHOOK_URL}/webhook`
     try {
-      await bot.telegram.setWebhook(webhookEndpoint)
+      await bot.telegram.setWebhook(webhookEndpoint, { secret_token: WEBHOOK_SECRET })
       const info = await bot.telegram.getWebhookInfo()
       console.log(`Webhook set: ${info.url} (pending: ${info.pending_update_count})`)
     } catch (err) {
