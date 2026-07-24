@@ -23,6 +23,11 @@ const io = new Server(httpServer, {
 app.use(cors())
 app.use(express.json({ limit: '8mb' }))
 
+// No DB hit on purpose — meant for an external uptime pinger (e.g.
+// UptimeRobot) to keep Render's free tier from spinning the service down
+// after 15 minutes idle, not to report app health.
+app.get('/health', (_req, res) => res.status(200).send('ok'))
+
 // Supabase client (service role для серверного доступа)
 export const supabase = createClient(
   process.env.SUPABASE_URL,
