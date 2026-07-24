@@ -1017,6 +1017,11 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to update event' })
   }
 
+  notifyEventPeople(
+    req.params.id, req.auth.sub,
+    (title) => `✏️ Організатор оновив деталі заходу «${title}» — перевір, що змінилося.`,
+  ).catch(() => {})
+
   res.json({ event: shapeEvent(row, req.auth.sub) })
 })
 
