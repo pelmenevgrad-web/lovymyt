@@ -281,8 +281,11 @@ app.post('/auth/telegram', async (req, res) => {
   res.json({ token, user: { ...user, ...(await computeUserStats(user.id)) } })
 })
 
-// Requires a valid `Authorization: Bearer <jwt>` issued by /auth/telegram
-function requireAuth(req, res, next) {
+// Requires a valid `Authorization: Bearer <jwt>` issued by /auth/telegram.
+// Also re-checks is_banned on every request — the JWT is valid for 30 days,
+// so without this a ban only blocked issuing a *new* token and did nothing
+// to someone who already had one.
+async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization ?? ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
 
@@ -292,10 +295,16 @@ function requireAuth(req, res, next) {
 
   try {
     req.auth = jwt.verify(token, JWT_SECRET)
-    next()
   } catch {
-    res.status(401).json({ error: 'Invalid or expired token' })
+    return res.status(401).json({ error: 'Invalid or expired token' })
   }
+
+  const { data: user } = await supabase.from('users').select('is_banned, ban_reason').eq('id', req.auth.sub).single()
+  if (user?.is_banned) {
+    return res.status(403).json({ error: `Тебе заблоковано.${user.ban_reason ? ` Причина: ${user.ban_reason}` : ''}` })
+  }
+
+  next()
 }
 
 // Like requireAuth, but doesn't reject when there's no/invalid token —
@@ -890,6 +899,15 @@ app.post('/events', requireAuth, async (req, res) => {
   if (radius_visibility && !['public', 'accepted_only'].includes(radius_visibility)) {
     return res.status(400).json({ error: 'radius_visibility must be "public" or "accepted_only"' })
   }
+  if (max_participants != null && (!Number.isInteger(Number(max_participants)) || Number(max_participants) < 1)) {
+    return res.status(400).json({ error: 'max_participants має бути щонайменше 1' })
+  }
+  if (age_min != null && age_max != null && Number(age_min) > Number(age_max)) {
+    return res.status(400).json({ error: 'age_min не може бути більшим за age_max' })
+  }
+  if (budget_amount != null && Number(budget_amount) < 0) {
+    return res.status(400).json({ error: 'budget_amount не може бути від\'ємним' })
+  }
 
   const { data: creator } = await supabase
     .from('users')
@@ -897,53 +915,48 @@ app.post('/events', requireAuth, async (req, res) => {
     .eq('id', req.auth.sub)
     .single()
 
-  if (!isProActive(creator ?? {})) {
-    const { count: activeCount } = await supabase
-      .from('events')
-      .select('id', { count: 'exact', head: true })
-      .eq('creator_id', req.auth.sub)
-      .in('status', ['planned', 'gathering', 'active'])
-
-    if ((activeCount ?? 0) >= FREE_ACTIVE_EVENTS_LIMIT) {
-      return res.status(403).json({
-        error: `На безкоштовному тарифі можна мати не більше ${FREE_ACTIVE_EVENTS_LIMIT} активних заходів. Онови до PRO для необмеженої кількості.`,
-        code: 'FREE_EVENT_LIMIT',
-      })
-    }
-  }
-
   try {
     const cover_image_url = await resolveCoverImage(cover_image, req.auth.sub)
 
-    const { data: created, error } = await supabase
-      .from('events')
-      .insert({
-        creator_id: req.auth.sub,
-        category_id: categoryIds[0], title: title.trim(), description: description?.trim() || null,
-        address_text: address_text.trim(),
-        start_time, lat, lng,
-        end_time: computeEndTime(start_time, duration_max_hours),
-        duration_min_hours: duration_min_hours || null,
-        max_participants, min_participants, budget_type,
-        budget_amount: budget_amount || null,
-        age_min: age_min || null, age_max: age_max || null,
-        allowed_gender: allowed_gender || 'any',
-        max_male: max_male || null, max_female: max_female || null,
-        radius_visibility: radius_visibility || 'public',
-        conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
-        cover_image_url,
-      })
-      .select('id')
-      .single()
+    // Free-tier active-event cap check + insert happen atomically inside this
+    // one Postgres function (advisory-locked per creator_id), so firing
+    // several create requests back to back can't slip past the limit.
+    const { data: newId, error } = await supabase.rpc('create_event_atomic', {
+      p_creator_id: req.auth.sub,
+      p_is_pro: isProActive(creator ?? {}),
+      p_free_limit: FREE_ACTIVE_EVENTS_LIMIT,
+      p_category_id: categoryIds[0], p_title: title.trim(), p_description: description?.trim() || null,
+      p_address_text: address_text.trim(),
+      p_start_time: start_time, p_lat: lat, p_lng: lng,
+      p_end_time: computeEndTime(start_time, duration_max_hours),
+      p_duration_min_hours: duration_min_hours || null,
+      p_max_participants: max_participants || null, p_min_participants: min_participants || null,
+      p_budget_type: budget_type || 'free',
+      p_budget_amount: budget_amount || null,
+      p_age_min: age_min || null, p_age_max: age_max || null,
+      p_allowed_gender: allowed_gender || 'any',
+      p_max_male: max_male || null, p_max_female: max_female || null,
+      p_radius_visibility: radius_visibility || 'public',
+      p_conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
+      p_cover_image_url: cover_image_url,
+    })
 
-    if (error) throw error
+    if (error) {
+      if (error.message?.includes('event_limit_reached')) {
+        return res.status(403).json({
+          error: `На безкоштовному тарифі можна мати не більше ${FREE_ACTIVE_EVENTS_LIMIT} активних заходів. Онови до PRO для необмеженої кількості.`,
+          code: 'FREE_EVENT_LIMIT',
+        })
+      }
+      throw error
+    }
 
-    await syncEventCategories(created.id, categoryIds)
+    await syncEventCategories(newId, categoryIds)
 
     const { data: row, error: refetchErr } = await supabase
       .from('events')
       .select(EVENT_SELECT)
-      .eq('id', created.id)
+      .eq('id', newId)
       .single()
     if (refetchErr) throw refetchErr
 
@@ -995,6 +1008,15 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
   }
   if (radius_visibility && !['public', 'accepted_only'].includes(radius_visibility)) {
     return res.status(400).json({ error: 'radius_visibility must be "public" or "accepted_only"' })
+  }
+  if (max_participants != null && (!Number.isInteger(Number(max_participants)) || Number(max_participants) < 1)) {
+    return res.status(400).json({ error: 'max_participants має бути щонайменше 1' })
+  }
+  if (age_min != null && age_max != null && Number(age_min) > Number(age_max)) {
+    return res.status(400).json({ error: 'age_min не може бути більшим за age_max' })
+  }
+  if (budget_amount != null && Number(budget_amount) < 0) {
+    return res.status(400).json({ error: 'budget_amount не може бути від\'ємним' })
   }
 
   let row, error
