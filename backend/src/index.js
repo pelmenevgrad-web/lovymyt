@@ -1050,7 +1050,7 @@ const GENDER_LABEL = { male: 'чоловіків', female: 'жінок' }
 app.post('/events/:id/join', requireAuth, async (req, res) => {
   const { data: event, error: eventErr } = await supabase
     .from('events')
-    .select('creator_id, allowed_gender, max_male, max_female, status, age_min, age_max')
+    .select('creator_id, allowed_gender, max_male, max_female, status, age_min, age_max, max_participants')
     .eq('id', req.params.id)
     .single()
 
@@ -1094,6 +1094,31 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
     }
     if (joiner.gender !== event.allowed_gender) {
       return res.status(403).json({ error: `Цей захід тільки для ${GENDER_LABEL[event.allowed_gender]}` })
+    }
+  }
+
+  const { data: existingParticipant } = await supabase
+    .from('event_participants')
+    .select('status')
+    .eq('event_id', req.params.id)
+    .eq('user_id', req.auth.sub)
+    .maybeSingle()
+
+  // Only a brand-new (or rejoining after having left/been declined) participant
+  // counts against the cap — someone already accepted re-hitting join is a no-op.
+  if (existingParticipant?.status !== 'accepted' && event.max_participants) {
+    const { count: acceptedCount, error: capErr } = await supabase
+      .from('event_participants')
+      .select('id', { count: 'exact', head: true })
+      .eq('event_id', req.params.id)
+      .eq('status', 'accepted')
+
+    if (capErr) {
+      console.error('Counting participants for capacity failed:', capErr.message)
+      return res.status(500).json({ error: 'Failed to verify capacity' })
+    }
+    if ((acceptedCount ?? 0) >= event.max_participants) {
+      return res.status(403).json({ error: 'На жаль, усі місця вже зайняті' })
     }
   }
 
