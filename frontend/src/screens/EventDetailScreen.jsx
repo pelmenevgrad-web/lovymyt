@@ -164,6 +164,9 @@ export default function EventDetailScreen() {
   const [confirmingComplete, setConfirmingComplete] = useState(false)
   const [completing, setCompleting] = useState(false)
   const [completeError, setCompleteError] = useState(null)
+  const [confirmingCancel, setConfirmingCancel] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState(null)
   const [continuing, setContinuing] = useState(false)
   const [, forceTick] = useState(0)
 
@@ -235,6 +238,20 @@ export default function EventDetailScreen() {
       setCompleteError(err.message)
     } finally {
       setCompleting(false)
+    }
+  }
+
+  async function handleCancel() {
+    setCancelling(true)
+    setCancelError(null)
+    try {
+      const { event: updated } = await apiFetch(`/events/${id}/cancel`, { method: 'POST' })
+      setEvent(updated)
+      setConfirmingCancel(false)
+    } catch (err) {
+      setCancelError(err.message)
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -547,6 +564,35 @@ export default function EventDetailScreen() {
                   onClick={() => setConfirmingComplete(true)}
                 >
                   <Flag size={16} /> Завершити захід
+                </button>
+              )
+            )}
+
+            {!isEnded && !confirmingComplete && (
+              confirmingCancel ? (
+                <div style={{ marginTop: 8 }}>
+                  {cancelError && (
+                    <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 8, textAlign: 'center' }}>{cancelError}</div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      className="btn" style={{ flex: 1, background: 'var(--red)', color: '#fff', opacity: cancelling ? .6 : 1 }}
+                      disabled={cancelling} onClick={handleCancel}
+                    >
+                      {cancelling ? 'Скасовуємо…' : 'Так, скасувати захід'}
+                    </button>
+                    <button className="btn btn-ghost" style={{ flex: 1 }} disabled={cancelling} onClick={() => setConfirmingCancel(false)}>
+                      Назад
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  className="btn btn-ghost"
+                  style={{ width: '100%', marginTop: 8 }}
+                  onClick={() => setConfirmingCancel(true)}
+                >
+                  Скасувати захід
                 </button>
               )
             )}

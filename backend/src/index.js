@@ -1023,6 +1023,44 @@ app.post('/events/:id/complete', requireAuth, async (req, res) => {
   res.json({ event: shapeEvent(row) })
 })
 
+// Organizer calls off the event entirely — distinct from "complete", which
+// implies it happened (and would let people rate it / show it in history).
+// Previously the only way to end an event early was to mark it completed,
+// even for a cancellation.
+app.post('/events/:id/cancel', requireAuth, async (req, res) => {
+  const { data: existing, error: fetchErr } = await supabase
+    .from('events')
+    .select('creator_id, title, status')
+    .eq('id', req.params.id)
+    .single()
+
+  if (fetchErr) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  if (existing.creator_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки організатор може скасувати захід' })
+  }
+  if (existing.status === 'completed' || existing.status === 'cancelled') {
+    return res.status(400).json({ error: 'Захід вже завершено' })
+  }
+
+  const { data: row, error } = await supabase
+    .from('events')
+    .update({ status: 'cancelled' })
+    .eq('id', req.params.id)
+    .select(EVENT_SELECT)
+    .single()
+
+  if (error) {
+    console.error('Cancelling event failed:', error.message)
+    return res.status(500).json({ error: 'Failed to cancel event' })
+  }
+
+  notifyEventPeople(req.params.id, req.auth.sub, (title) => `❌ Організатор скасував захід «${title}»`).catch(() => {})
+
+  res.json({ event: shapeEvent(row) })
+})
+
 // Organizer confirms the event should run even though min_participants
 // hasn't been reached — otherwise sweepActivateEvents would cancel it once
 // start_time arrives (see the low-turnout warning it gets an hour before).
