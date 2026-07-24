@@ -752,6 +752,50 @@ app.get('/events/history', async (_req, res) => {
   res.json({ events })
 })
 
+// Ranked list of organizers who've actually run events — rating_avg/count on
+// users covers reviews received in any role, not just as organizer, but
+// requiring at least one completed event they created keeps this scoped to
+// people worth calling "organizers" rather than just well-liked participants.
+app.get('/organizers/top', async (_req, res) => {
+  const { data: completedEvents, error: eventsErr } = await supabase
+    .from('events')
+    .select('creator_id')
+    .eq('status', 'completed')
+
+  if (eventsErr) {
+    console.error('Fetching completed events for leaderboard failed:', eventsErr.message)
+    return res.status(500).json({ error: 'Failed to load top organizers' })
+  }
+
+  const organizedCounts = new Map()
+  for (const { creator_id } of completedEvents) {
+    if (!creator_id) continue
+    organizedCounts.set(creator_id, (organizedCounts.get(creator_id) ?? 0) + 1)
+  }
+
+  if (organizedCounts.size === 0) {
+    return res.json({ organizers: [] })
+  }
+
+  const { data: users, error: usersErr } = await supabase
+    .from('users')
+    .select('id, first_name, avatar_url, is_verified, is_pro, rating_avg, rating_count')
+    .in('id', [...organizedCounts.keys()])
+    .gt('rating_count', 0)
+
+  if (usersErr) {
+    console.error('Fetching organizer profiles for leaderboard failed:', usersErr.message)
+    return res.status(500).json({ error: 'Failed to load top organizers' })
+  }
+
+  const organizers = users
+    .map(u => ({ ...u, events_organized: organizedCounts.get(u.id) ?? 0 }))
+    .sort((a, b) => b.rating_avg - a.rating_avg || b.events_organized - a.events_organized)
+    .slice(0, 50)
+
+  res.json({ organizers })
+})
+
 // duration_max_hours becomes end_time (start_time + N hours) — the hard
 // cutoff where the background sweep (see setInterval below) auto-completes
 // the event if the organizer hasn't already. duration_min_hours is descriptive only.

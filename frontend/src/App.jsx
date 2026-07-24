@@ -15,6 +15,7 @@ import EventChatScreen from './screens/EventChatScreen.jsx'
 import EventReportScreen from './screens/EventReportScreen.jsx'
 import PublicProfileScreen from './screens/PublicProfileScreen.jsx'
 import EventHistoryScreen from './screens/EventHistoryScreen.jsx'
+import TopOrganizersScreen from './screens/TopOrganizersScreen.jsx'
 import UserArchiveScreen from './screens/UserArchiveScreen.jsx'
 import AdminScreen from './screens/AdminScreen.jsx'
 import AdminCategoriesScreen from './screens/AdminCategoriesScreen.jsx'
@@ -188,6 +189,7 @@ export default function App() {
         <Route path="/events/:id/chat" element={<EventChatScreen />} />
         <Route path="/events/:id/report" element={<EventReportScreen />} />
         <Route path="/events/history" element={<EventHistoryScreen />} />
+        <Route path="/organizers/top" element={<TopOrganizersScreen />} />
         <Route path="/users/:id" element={<PublicProfileScreen />} />
         <Route path="/users/:id/archive" element={<UserArchiveScreen />} />
         <Route path="/admin" element={<AdminOnly><AdminScreen /></AdminOnly>} />
