@@ -1094,7 +1094,7 @@ const GENDER_LABEL = { male: 'чоловіків', female: 'жінок' }
 app.post('/events/:id/join', requireAuth, async (req, res) => {
   const { data: event, error: eventErr } = await supabase
     .from('events')
-    .select('creator_id, allowed_gender, max_male, max_female, status, age_min, age_max, max_participants')
+    .select('creator_id, allowed_gender, max_male, max_female, status, age_min, age_max, max_participants, conditions')
     .eq('id', req.params.id)
     .single()
 
@@ -1110,13 +1110,17 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
 
   const { data: joiner, error: joinerErr } = await supabase
     .from('users')
-    .select('gender, first_name, birth_date')
+    .select('gender, first_name, birth_date, is_verified')
     .eq('id', req.auth.sub)
     .single()
 
   if (joinerErr) {
     console.error('Fetching joiner failed:', joinerErr.message)
     return res.status(500).json({ error: 'Failed to verify user' })
+  }
+
+  if (event.conditions?.verified_only && !joiner.is_verified) {
+    return res.status(403).json({ error: 'Цей захід тільки для верифікованих користувачів. Подай заявку на верифікацію у профілі.' })
   }
 
   if (event.age_min || event.age_max) {
