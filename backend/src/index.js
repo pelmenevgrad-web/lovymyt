@@ -1309,59 +1309,20 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
     }
   }
 
-  const { data: existingParticipant } = await supabase
-    .from('event_participants')
-    .select('status')
-    .eq('event_id', req.params.id)
-    .eq('user_id', req.auth.sub)
-    .maybeSingle()
-
-  // Only a brand-new (or rejoining after having left/been declined) participant
-  // counts against the cap — someone already accepted re-hitting join is a no-op.
-  if (existingParticipant?.status !== 'accepted' && event.max_participants) {
-    const { count: acceptedCount, error: capErr } = await supabase
-      .from('event_participants')
-      .select('id', { count: 'exact', head: true })
-      .eq('event_id', req.params.id)
-      .eq('status', 'accepted')
-
-    if (capErr) {
-      console.error('Counting participants for capacity failed:', capErr.message)
-      return res.status(500).json({ error: 'Failed to verify capacity' })
-    }
-    if ((acceptedCount ?? 0) >= event.max_participants) {
-      return res.status(403).json({ error: 'На жаль, усі місця вже зайняті' })
-    }
-  }
-
-  const quota = joiner.gender === 'male' ? event.max_male : joiner.gender === 'female' ? event.max_female : null
-  if (quota) {
-    const { data: sameGender, error: countErr } = await supabase
-      .from('event_participants')
-      .select('user:users!inner(gender)')
-      .eq('event_id', req.params.id)
-      .eq('status', 'accepted')
-      .eq('users.gender', joiner.gender)
-
-    if (countErr) {
-      console.error('Counting participants by gender failed:', countErr.message)
-      return res.status(500).json({ error: 'Failed to verify quota' })
-    }
-    if (sameGender.length >= quota) {
-      return res.status(403).json({ error: `Ліміт для ${GENDER_LABEL[joiner.gender]} вже заповнений` })
-    }
-  }
-
-  const { data, error } = await supabase
-    .from('event_participants')
-    .upsert(
-      { event_id: req.params.id, user_id: req.auth.sub, status: 'accepted' },
-      { onConflict: 'event_id,user_id' },
-    )
-    .select()
-    .single()
+  // Capacity + gender-quota check and the insert all happen atomically inside
+  // this one Postgres function (advisory-locked per event_id), so two people
+  // joining for the last spot at the same moment can't both slip past the cap.
+  const { data, error } = await supabase.rpc('join_event_atomic', {
+    p_event_id: req.params.id, p_user_id: req.auth.sub, p_gender: joiner.gender ?? null,
+  })
 
   if (error) {
+    if (error.message?.includes('event_full')) {
+      return res.status(403).json({ error: 'На жаль, усі місця вже зайняті' })
+    }
+    if (error.message?.includes('gender_quota_full')) {
+      return res.status(403).json({ error: `Ліміт для ${GENDER_LABEL[joiner.gender]} вже заповнений` })
+    }
     console.error('Join failed:', error.message)
     return res.status(500).json({ error: 'Failed to join event' })
   }
