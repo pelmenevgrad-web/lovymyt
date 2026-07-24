@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import WebApp from '@twa-dev/sdk'
-import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Save, Zap, Plus, X, Loader2, Camera, Image as ImageIcon } from 'lucide-react'
+import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Save, Zap, Plus, X, Loader2, Camera, Image as ImageIcon, Lock } from 'lucide-react'
 import { useCategories } from '../context/CategoriesContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import { compressImage } from '../lib/image.js'
@@ -71,6 +71,7 @@ export default function CreateScreen() {
     conditions: { with_pets: false, with_kids: false, verified_only: false },
     supplies: [],
     cover_image: null,
+    radius_visibility: 'public',
   })
 
   const [submitting, setSubmitting] = useState(false)
@@ -125,6 +126,7 @@ export default function CreateScreen() {
             verified_only: !!event.conditions?.verified_only,
           },
           cover_image: event.cover_image_url ?? null,
+          radius_visibility: event.radius_visibility ?? 'public',
         }))
       })
       .catch(err => setLoadError(err.message))
@@ -193,6 +195,7 @@ export default function CreateScreen() {
           late_join_allowed: form.late_join_allowed,
           conditions: form.conditions,
           cover_image: form.cover_image,
+          radius_visibility: form.radius_visibility,
         }),
       })
 
@@ -339,6 +342,18 @@ export default function CreateScreen() {
           isDark={isDark}
           onChange={({ address_text, lat, lng }) => setForm(f => ({ ...f, address_text, lat, lng }))}
         />
+        <button
+          className="chip"
+          style={{
+            marginTop: 8,
+            background: form.radius_visibility === 'accepted_only' ? 'var(--accent-light)' : 'var(--card)',
+            color: form.radius_visibility === 'accepted_only' ? 'var(--accent)' : 'var(--text)',
+            border: '1.5px solid ' + (form.radius_visibility === 'accepted_only' ? 'var(--accent)' : 'var(--border)'),
+          }}
+          onClick={() => set('radius_visibility', form.radius_visibility === 'accepted_only' ? 'public' : 'accepted_only')}
+        >
+          <Lock size={15} /> Точну адресу бачать тільки прийняті учасники
+        </button>
       </Section>
 
       {/* Date/time */}

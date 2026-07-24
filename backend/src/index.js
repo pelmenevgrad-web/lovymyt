@@ -657,12 +657,27 @@ app.post('/users/me/verification', requireAuth, async (req, res) => {
 
 const EVENT_SELECT = '*, creator:users!events_creator_id_fkey(first_name, avatar_url, is_pro), participants:event_participants(status, user:users(id, first_name, avatar_url)), categoryLinks:event_categories(category_id)'
 
+// Rounds to ~1.1km precision — enough to place a marker in the right
+// neighborhood without exposing the exact building for accepted_only events.
+function roundCoord(n) {
+  return n == null ? n : Math.round(n * 100) / 100
+}
+
 // Shapes a DB row (with embedded creator/participants) into the flat object
 // shape the frontend already works with (same fields as the old mocks).
-function shapeEvent(row) {
+// `viewerId` (the authenticated caller, if any) decides whether an
+// accepted_only event's exact location gets sent to them at all — this has
+// to happen here, not client-side, or the exact coords would already be
+// sitting in the response for anyone who inspects it.
+function shapeEvent(row, viewerId = null) {
   const { late_join_allowed, ...conditions } = row.conditions ?? {}
   const accepted = (row.participants ?? []).filter(p => p.status === 'accepted' && p.user)
   const category_ids = (row.categoryLinks ?? []).map(c => c.category_id)
+
+  const isCreator = viewerId != null && row.creator_id === viewerId
+  const isAcceptedParticipant = viewerId != null && accepted.some(p => p.user.id === viewerId)
+  const canSeeExactLocation = row.radius_visibility !== 'accepted_only' || isCreator || isAcceptedParticipant
+
   return {
     id: row.id,
     title: row.title,
@@ -673,9 +688,11 @@ function shapeEvent(row) {
     start_time: row.start_time,
     end_time: row.end_time,
     duration_min_hours: row.duration_min_hours,
-    lat: row.lat,
-    lng: row.lng,
-    address_text: row.address_text,
+    lat: canSeeExactLocation ? row.lat : roundCoord(row.lat),
+    lng: canSeeExactLocation ? row.lng : roundCoord(row.lng),
+    address_text: canSeeExactLocation ? row.address_text : null,
+    address_hidden: !canSeeExactLocation,
+    radius_visibility: row.radius_visibility ?? 'public',
     max_participants: row.max_participants,
     current_participants: accepted.length,
     participant_avatars: accepted.slice(0, 4).map(p => ({
@@ -700,7 +717,7 @@ function shapeEvent(row) {
 }
 
 // Public list of upcoming/in-progress events for the map
-app.get('/events', async (_req, res) => {
+app.get('/events', async (req, res) => {
   const { data, error } = await supabase
     .from('events')
     .select(EVENT_SELECT)
@@ -713,11 +730,12 @@ app.get('/events', async (_req, res) => {
     return res.status(500).json({ error: 'Failed to load events' })
   }
 
-  res.json({ events: data.map(shapeEvent) })
+  const viewerId = tryAuth(req)?.sub
+  res.json({ events: data.map(row => shapeEvent(row, viewerId)) })
 })
 
 // Past events, ranked by average rating (from reviews left about that event)
-app.get('/events/history', async (_req, res) => {
+app.get('/events/history', async (req, res) => {
   const { data, error } = await supabase
     .from('events')
     .select(EVENT_SELECT)
@@ -746,13 +764,14 @@ app.get('/events/history', async (_req, res) => {
     ratingsByEvent.set(event_id, bucket)
   }
 
+  const viewerId = tryAuth(req)?.sub
   const events = data
     .map((row) => {
       const ratings = ratingsByEvent.get(row.id) ?? []
       const rating_avg = ratings.length
         ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 100) / 100
         : null
-      return { ...shapeEvent(row), rating_avg, rating_count: ratings.length }
+      return { ...shapeEvent(row, viewerId), rating_avg, rating_count: ratings.length }
     })
     .sort((a, b) => (b.rating_avg ?? -1) - (a.rating_avg ?? -1))
 
@@ -832,7 +851,7 @@ app.post('/events', requireAuth, async (req, res) => {
     category_ids, title, description, address_text, start_time, lat, lng,
     max_participants, min_participants, budget_type, budget_amount,
     age_min, age_max, late_join_allowed, conditions,
-    allowed_gender, max_male, max_female,
+    allowed_gender, max_male, max_female, radius_visibility,
     duration_min_hours, duration_max_hours, cover_image,
   } = req.body ?? {}
 
@@ -845,6 +864,9 @@ app.post('/events', requireAuth, async (req, res) => {
   }
   if (allowed_gender && !['any', 'male', 'female'].includes(allowed_gender)) {
     return res.status(400).json({ error: 'allowed_gender must be "any", "male" or "female"' })
+  }
+  if (radius_visibility && !['public', 'accepted_only'].includes(radius_visibility)) {
+    return res.status(400).json({ error: 'radius_visibility must be "public" or "accepted_only"' })
   }
 
   const { data: creator } = await supabase
@@ -885,6 +907,7 @@ app.post('/events', requireAuth, async (req, res) => {
         age_min: age_min || null, age_max: age_max || null,
         allowed_gender: allowed_gender || 'any',
         max_male: max_male || null, max_female: max_female || null,
+        radius_visibility: radius_visibility || 'public',
         conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
         cover_image_url,
       })
@@ -902,7 +925,7 @@ app.post('/events', requireAuth, async (req, res) => {
       .single()
     if (refetchErr) throw refetchErr
 
-    const shaped = shapeEvent(row)
+    const shaped = shapeEvent(row, req.auth.sub)
     notifyAboutNewEvent(shaped, req.auth.sub).catch(() => {})
 
     res.status(201).json({ event: shaped })
@@ -934,7 +957,7 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
     category_ids, title, description, address_text, start_time, lat, lng,
     max_participants, min_participants, budget_type, budget_amount,
     age_min, age_max, late_join_allowed, conditions,
-    allowed_gender, max_male, max_female,
+    allowed_gender, max_male, max_female, radius_visibility,
     duration_min_hours, duration_max_hours, cover_image,
   } = req.body ?? {}
 
@@ -947,6 +970,9 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
   }
   if (allowed_gender && !['any', 'male', 'female'].includes(allowed_gender)) {
     return res.status(400).json({ error: 'allowed_gender must be "any", "male" or "female"' })
+  }
+  if (radius_visibility && !['public', 'accepted_only'].includes(radius_visibility)) {
+    return res.status(400).json({ error: 'radius_visibility must be "public" or "accepted_only"' })
   }
 
   let row, error
@@ -965,6 +991,7 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
         age_min: age_min || null, age_max: age_max || null,
         allowed_gender: allowed_gender || 'any',
         max_male: max_male || null, max_female: max_female || null,
+        radius_visibility: radius_visibility || 'public',
         conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
         cover_image_url,
       })
@@ -990,7 +1017,7 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to update event' })
   }
 
-  res.json({ event: shapeEvent(row) })
+  res.json({ event: shapeEvent(row, req.auth.sub) })
 })
 
 // Manually end an event — organizer only
@@ -1020,7 +1047,7 @@ app.post('/events/:id/complete', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to complete event' })
   }
 
-  res.json({ event: shapeEvent(row) })
+  res.json({ event: shapeEvent(row, req.auth.sub) })
 })
 
 // Organizer calls off the event entirely — distinct from "complete", which
@@ -1058,7 +1085,7 @@ app.post('/events/:id/cancel', requireAuth, async (req, res) => {
 
   notifyEventPeople(req.params.id, req.auth.sub, (title) => `❌ Організатор скасував захід «${title}»`).catch(() => {})
 
-  res.json({ event: shapeEvent(row) })
+  res.json({ event: shapeEvent(row, req.auth.sub) })
 })
 
 // Organizer confirms the event should run even though min_participants
@@ -1093,7 +1120,7 @@ app.post('/events/:id/continue-anyway', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to update event' })
   }
 
-  res.json({ event: shapeEvent(row) })
+  res.json({ event: shapeEvent(row, req.auth.sub) })
 })
 
 // Single event's full detail — includes the caller's own participation
@@ -1124,7 +1151,7 @@ app.get('/events/:id', async (req, res) => {
 
   res.json({
     event: {
-      ...shapeEvent(data),
+      ...shapeEvent(data, auth?.sub),
       description: data.description,
       min_participants: data.min_participants,
       is_creator: auth?.sub === data.creator_id,
@@ -1164,7 +1191,7 @@ app.get('/users/me/events', requireAuth, async (req, res) => {
   }
 
   res.json({
-    events: data.map(row => ({ ...shapeEvent(row), is_creator: row.creator_id === req.auth.sub })),
+    events: data.map(row => ({ ...shapeEvent(row, req.auth.sub), is_creator: row.creator_id === req.auth.sub })),
   })
 })
 
@@ -1549,8 +1576,9 @@ app.get('/users/:id/events', async (req, res) => {
     return res.status(500).json({ error: 'Failed to load events' })
   }
 
+  const viewerId = tryAuth(req)?.sub
   res.json({
-    events: data.map(row => ({ ...shapeEvent(row), is_creator: row.creator_id === req.params.id })),
+    events: data.map(row => ({ ...shapeEvent(row, viewerId), is_creator: row.creator_id === req.params.id })),
   })
 })
 

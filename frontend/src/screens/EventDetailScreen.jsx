@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
-  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX, Star,
+  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX, Star, Lock,
 } from 'lucide-react'
 import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
@@ -321,7 +321,8 @@ export default function EventDetailScreen() {
   function handleInvite() {
     shareViaTelegram(
       appLink(`event_${event.id}`),
-      `Приєднуйся до заходу «${event.title}» в ЛовиМить! ${formatDateTime(event.start_time)} • ${event.address_text}`,
+      `Приєднуйся до заходу «${event.title}» в ЛовиМить! ${formatDateTime(event.start_time)}` +
+        (event.address_text ? ` • ${event.address_text}` : ''),
     )
   }
 
@@ -418,7 +419,11 @@ export default function EventDetailScreen() {
               {Math.round((new Date(event.end_time) - new Date(event.start_time)) / 3_600_000)} год
             </ConditionRow>
           )}
-          <ConditionRow Icon={MapPin}>{event.address_text}</ConditionRow>
+          <ConditionRow Icon={event.address_hidden ? Lock : MapPin}>
+            {event.address_hidden
+              ? 'Точна адреса стане видимою після приєднання'
+              : event.address_text}
+          </ConditionRow>
           <ConditionRow Icon={Users}>
             {event.current_participants}/{event.max_participants} учасників
             {event.min_participants ? ` (мінімум ${event.min_participants})` : ''}

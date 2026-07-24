@@ -1,4 +1,4 @@
-import { BadgeCheck, Zap, Clock, MapPin, Star } from 'lucide-react'
+import { BadgeCheck, Zap, Clock, MapPin, Star, Lock } from 'lucide-react'
 import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
 import { formatCountdown } from '../lib/format.js'
@@ -134,7 +134,10 @@ export default function EventCard({ event, onClick, compact = false }) {
       {/* Meta row */}
       <div style={{ display: 'flex', gap: 12, fontSize: 13, color: 'var(--text-2)', marginBottom: 10 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={13} /> {formatCountdown(event.start_time)}</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><MapPin size={13} /> {event.address_text}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {event.address_hidden ? <Lock size={13} /> : <MapPin size={13} />}
+          {event.address_hidden ? 'Адреса прихована' : event.address_text}
+        </span>
       </div>
 
       {/* Footer row */}
