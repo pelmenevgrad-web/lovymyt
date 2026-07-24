@@ -52,7 +52,9 @@ function ChatItem({ chat, onClick }) {
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {chat.lastMessage
-            ? `${chat.lastMessage.sender?.first_name ?? 'Хтось'}: ${chat.lastMessage.text ?? '📷 Фото'}`
+            ? chat.lastMessage.is_system
+              ? chat.lastMessage.text
+              : `${chat.lastMessage.sender?.first_name ?? 'Хтось'}: ${chat.lastMessage.text ?? '📷 Фото'}`
             : 'Немає повідомлень — напиши перше!'}
         </div>
       </div>

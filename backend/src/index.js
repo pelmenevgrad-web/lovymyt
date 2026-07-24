@@ -156,6 +156,25 @@ async function notifyEventPeople(eventId, excludeUserId, textBuilder, startParam
   await Promise.all([...recipients.values()].map(tgId => notifyUser(tgId, text, startParam, buttonLabel)))
 }
 
+// Posts a system (sender-less) message into an event's chat, so anyone who
+// opens the chat later sees what happened even if they missed the Telegram
+// push — join/leave/decline/cancel/complete/edit all call this alongside
+// notifyEventPeople.
+async function postSystemMessage(eventId, text) {
+  try {
+    const chatId = await getOrCreateChat(eventId)
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .insert({ chat_id: chatId, sender_id: null, text, is_system: true })
+      .select(CHAT_MESSAGE_SELECT)
+      .single()
+    if (error) throw error
+    io.to(`event:${eventId}`).emit('new_message', data)
+  } catch (err) {
+    console.error('Posting system chat message failed:', err.message)
+  }
+}
+
 function haversineKm(lat1, lng1, lat2, lng2) {
   const R = 6371
   const dLat = (lat2 - lat1) * Math.PI / 180
@@ -1021,6 +1040,7 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
     req.params.id, req.auth.sub,
     (title) => `✏️ Організатор оновив деталі заходу «${title}» — перевір, що змінилося.`,
   ).catch(() => {})
+  postSystemMessage(req.params.id, '✏️ Організатор оновив деталі заходу — перевір, що змінилося.')
 
   res.json({ event: shapeEvent(row, req.auth.sub) })
 })
@@ -1057,6 +1077,7 @@ app.post('/events/:id/complete', requireAuth, async (req, res) => {
     (title) => `✅ Захід «${title}» завершено — оціни учасників, це впливає на їхню надійність і кумедні звання.`,
     `review_${req.params.id}`, 'Оцінити',
   ).catch(() => {})
+  postSystemMessage(req.params.id, '✅ Захід завершено. Не забудьте оцінити учасників!')
 
   res.json({ event: shapeEvent(row, req.auth.sub) })
 })
@@ -1095,6 +1116,7 @@ app.post('/events/:id/cancel', requireAuth, async (req, res) => {
   }
 
   notifyEventPeople(req.params.id, req.auth.sub, (title) => `❌ Організатор скасував захід «${title}»`).catch(() => {})
+  postSystemMessage(req.params.id, '❌ Організатор скасував захід.')
 
   res.json({ event: shapeEvent(row, req.auth.sub) })
 })
@@ -1348,6 +1370,7 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
   notifyEventPeople(req.params.id, req.auth.sub, (title) =>
     `✅ ${joiner.first_name ?? 'Хтось'} приєднався до заходу «${title}»`,
   ).catch(() => {})
+  postSystemMessage(req.params.id, `✅ ${joiner.first_name ?? 'Хтось'} приєднався до заходу.`)
 
   res.json({ participant: data })
 })
@@ -1429,6 +1452,7 @@ app.post('/events/:id/participants/:userId/decline', requireAuth, async (req, re
     declined.user?.telegram_id,
     `❌ Організатор відмовив тобі в участі у заході «${event.title}».\nПричина: ${reason}`,
   ).catch(() => {})
+  postSystemMessage(req.params.id, '❌ Організатор відмовив одному з учасників в участі.')
 
   res.json({ ok: true })
 })
@@ -1472,6 +1496,7 @@ app.post('/events/:id/leave', requireAuth, async (req, res) => {
     req.params.id, req.auth.sub,
     (title) => `👋 ${me?.first_name ?? 'Учасник'} більше не бере участь у заході «${title}»`,
   ).catch(() => {})
+  postSystemMessage(req.params.id, `👋 ${me?.first_name ?? 'Учасник'} більше не бере участь у заході.`)
 
   res.json({ ok: true })
 })
@@ -2500,9 +2525,10 @@ async function sweepActivateEvents() {
 
   if (toCancel.length > 0) {
     await supabase.from('events').update({ status: 'cancelled' }).in('id', toCancel.map(e => e.id))
-    await Promise.all(toCancel.map(event =>
+    await Promise.all(toCancel.map(event => Promise.all([
       notifyEventPeople(event.id, null, (title) => `❌ Захід «${title}» скасовано — не набралось мінімальної кількості учасників.`).catch(() => {}),
-    ))
+      postSystemMessage(event.id, '❌ Захід скасовано — не набралось мінімальної кількості учасників.'),
+    ])))
   }
   if (toActivate.length > 0) {
     await supabase.from('events').update({ status: 'active' }).in('id', toActivate.map(e => e.id))
@@ -2529,13 +2555,14 @@ async function sweepExpiredEvents() {
 
   if (error) return console.error('Auto-complete sweep failed:', error.message)
 
-  await Promise.all(candidates.map(event =>
+  await Promise.all(candidates.map(event => Promise.all([
     notifyEventPeople(
       event.id, null,
       (title) => `✅ Захід «${title}» завершено — оціни учасників, це впливає на їхню надійність і кумедні звання.`,
       `review_${event.id}`, 'Оцінити',
     ).catch(() => {}),
-  ))
+    postSystemMessage(event.id, '✅ Захід завершено. Не забудьте оцінити учасників!'),
+  ])))
 }
 
 // Flips is_pro back to false once pro_expires_at has passed — the frontend

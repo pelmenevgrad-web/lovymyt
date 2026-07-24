@@ -122,6 +122,18 @@ export default function EventChatScreen() {
           </div>
         )}
         {messages.map(m => {
+          if (m.is_system) {
+            return (
+              <div key={m.id} style={{ textAlign: 'center', margin: '10px 0' }}>
+                <span style={{
+                  fontSize: 12, color: 'var(--text-2)', background: 'var(--card)',
+                  borderRadius: 'var(--radius-sm)', padding: '5px 10px', display: 'inline-block',
+                }}>
+                  {m.text}
+                </span>
+              </div>
+            )
+          }
           const mine = m.sender?.id === user?.id
           return (
             <div key={m.id} style={{ display: 'flex', gap: 8, marginBottom: 12, flexDirection: mine ? 'row-reverse' : 'row' }}>
