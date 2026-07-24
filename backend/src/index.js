@@ -183,6 +183,33 @@ async function postSystemMessage(eventId, text) {
   }
 }
 
+// Called after a leave/decline frees a spot, or an organizer raises
+// max_participants — advances the longest-waiting eligible person (respecting
+// gender quota) from 'waitlisted' to 'accepted' and lets them know. Returns
+// the promoted row, or null if nobody was waiting / there's still no room.
+async function promoteFromWaitlist(eventId) {
+  const { data: promoted, error } = await supabase.rpc('promote_from_waitlist_atomic', { p_event_id: eventId })
+  if (error) {
+    console.error('Promoting from waitlist failed:', error.message)
+    return null
+  }
+  // A SQL-level RETURN NULL for a composite-typed function comes back over
+  // PostgREST as an all-null object, not JSON null — check a real column.
+  if (!promoted?.id) return null
+
+  const { data: event } = await supabase.from('events').select('title').eq('id', eventId).single()
+  const { data: user } = await supabase.from('users').select('telegram_id, first_name').eq('id', promoted.user_id).single()
+
+  notifyUser(
+    user?.telegram_id,
+    `🎉 Звільнилося місце! Ти приєднався до заходу «${event?.title ?? ''}» зі списку очікування.`,
+    `event_${eventId}`, 'Відкрити захід',
+  ).catch(() => {})
+  postSystemMessage(eventId, `✅ ${user?.first_name ?? 'Хтось'} приєднався до заходу зі списку очікування.`)
+
+  return promoted
+}
+
 function haversineKm(lat1, lng1, lat2, lng2) {
   const R = 6371
   const dLat = (lat2 - lat1) * Math.PI / 180
@@ -721,6 +748,7 @@ function roundCoord(n) {
 function shapeEvent(row, viewerId = null) {
   const { late_join_allowed, ...conditions } = row.conditions ?? {}
   const accepted = (row.participants ?? []).filter(p => p.status === 'accepted' && p.user)
+  const waitlisted = (row.participants ?? []).filter(p => p.status === 'waitlisted' && p.user)
   const category_ids = (row.categoryLinks ?? []).map(c => c.category_id)
 
   const isCreator = viewerId != null && row.creator_id === viewerId
@@ -744,6 +772,7 @@ function shapeEvent(row, viewerId = null) {
     radius_visibility: row.radius_visibility ?? 'public',
     max_participants: row.max_participants,
     current_participants: accepted.length,
+    waitlist_count: waitlisted.length,
     participant_avatars: accepted.slice(0, 4).map(p => ({
       id: p.user.id, first_name: p.user.first_name, avatar_url: p.user.avatar_url,
     })),
@@ -995,7 +1024,7 @@ app.post('/events', requireAuth, async (req, res) => {
 app.patch('/events/:id', requireAuth, async (req, res) => {
   const { data: existing, error: fetchErr } = await supabase
     .from('events')
-    .select('creator_id')
+    .select('creator_id, max_participants')
     .eq('id', req.params.id)
     .single()
 
@@ -1085,7 +1114,20 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
   ).catch(() => {})
   postSystemMessage(req.params.id, '✏️ Організатор оновив деталі заходу — перевір, що змінилося.')
 
-  res.json({ event: shapeEvent(row, req.auth.sub) })
+  // More room than before (cap raised or removed entirely) — pull as many
+  // people off the waitlist as now fit, oldest-waiting first.
+  const newMax = max_participants || null
+  let finalRow = row
+  if (newMax === null || (existing.max_participants != null && newMax > existing.max_participants)) {
+    for (let i = 0; i < 200; i++) {
+      const promoted = await promoteFromWaitlist(req.params.id)
+      if (!promoted) break
+    }
+    const { data: refetched } = await supabase.from('events').select(EVENT_SELECT).eq('id', req.params.id).single()
+    if (refetched) finalRow = refetched
+  }
+
+  res.json({ event: shapeEvent(finalRow, req.auth.sub) })
 })
 
 // Manually end an event — organizer only
@@ -1218,14 +1260,25 @@ app.get('/events/:id', async (req, res) => {
 
   const auth = tryAuth(req)
   let myStatus = null
+  let waitlistPosition = null
   if (auth) {
     const { data: participant } = await supabase
       .from('event_participants')
-      .select('status')
+      .select('status, joined_at')
       .eq('event_id', req.params.id)
       .eq('user_id', auth.sub)
       .maybeSingle()
     myStatus = participant?.status ?? null
+
+    if (myStatus === 'waitlisted') {
+      const { count: aheadCount } = await supabase
+        .from('event_participants')
+        .select('id', { count: 'exact', head: true })
+        .eq('event_id', req.params.id)
+        .eq('status', 'waitlisted')
+        .lt('joined_at', participant.joined_at)
+      waitlistPosition = (aheadCount ?? 0) + 1
+    }
   }
 
   res.json({
@@ -1235,6 +1288,7 @@ app.get('/events/:id', async (req, res) => {
       min_participants: data.min_participants,
       is_creator: auth?.sub === data.creator_id,
       my_status: myStatus,
+      waitlist_position: waitlistPosition,
     },
   })
 })
@@ -1243,15 +1297,16 @@ app.get('/events/:id', async (req, res) => {
 app.get('/users/me/events', requireAuth, async (req, res) => {
   const { data: joinedRows, error: joinedErr } = await supabase
     .from('event_participants')
-    .select('event_id')
+    .select('event_id, status')
     .eq('user_id', req.auth.sub)
-    .eq('status', 'accepted')
+    .in('status', ['accepted', 'waitlisted'])
 
   if (joinedErr) {
     console.error('Fetching joined event ids failed:', joinedErr.message)
     return res.status(500).json({ error: 'Failed to load your events' })
   }
 
+  const myStatusByEvent = new Map(joinedRows.map(r => [r.event_id, r.status]))
   const joinedIds = joinedRows.map(r => r.event_id)
   let query = supabase
     .from('events')
@@ -1285,6 +1340,7 @@ app.get('/users/me/events', requireAuth, async (req, res) => {
       ...shapeEvent(row, req.auth.sub),
       is_creator: row.creator_id === req.auth.sub,
       needs_review: row.status === 'completed' && !reviewedIds.has(row.id),
+      my_status: myStatusByEvent.get(row.id) ?? null,
     })),
   })
 })
@@ -1352,19 +1408,25 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
   // Capacity + gender-quota check and the insert all happen atomically inside
   // this one Postgres function (advisory-locked per event_id), so two people
   // joining for the last spot at the same moment can't both slip past the cap.
+  // When there's no room, it waitlists instead of failing.
   const { data, error } = await supabase.rpc('join_event_atomic', {
     p_event_id: req.params.id, p_user_id: req.auth.sub, p_gender: joiner.gender ?? null,
   })
 
   if (error) {
-    if (error.message?.includes('event_full')) {
-      return res.status(403).json({ error: 'На жаль, усі місця вже зайняті' })
-    }
-    if (error.message?.includes('gender_quota_full')) {
-      return res.status(403).json({ error: `Ліміт для ${GENDER_LABEL[joiner.gender]} вже заповнений` })
-    }
     console.error('Join failed:', error.message)
     return res.status(500).json({ error: 'Failed to join event' })
+  }
+
+  if (data.status === 'waitlisted') {
+    const { count: aheadCount } = await supabase
+      .from('event_participants')
+      .select('id', { count: 'exact', head: true })
+      .eq('event_id', req.params.id)
+      .eq('status', 'waitlisted')
+      .lt('joined_at', data.joined_at)
+
+    return res.json({ participant: data, waitlist_position: (aheadCount ?? 0) + 1 })
   }
 
   // First participant flips it from "Планується" to "Збираються" — nothing
@@ -1461,6 +1523,8 @@ app.post('/events/:id/participants/:userId/decline', requireAuth, async (req, re
   ).catch(() => {})
   postSystemMessage(req.params.id, '❌ Організатор відмовив одному з учасників в участі.')
 
+  promoteFromWaitlist(req.params.id).catch(() => {})
+
   res.json({ ok: true })
 })
 
@@ -1481,29 +1545,41 @@ app.post('/events/:id/leave', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Захід вже завершено' })
   }
 
-  const { data: left, error } = await supabase
+  const { data: existing } = await supabase
+    .from('event_participants')
+    .select('status')
+    .eq('event_id', req.params.id)
+    .eq('user_id', req.auth.sub)
+    .in('status', ['accepted', 'waitlisted'])
+    .maybeSingle()
+
+  if (!existing) {
+    return res.status(400).json({ error: 'Ти не берешь участь у цьому заході' })
+  }
+
+  const { error } = await supabase
     .from('event_participants')
     .update({ status: 'left' })
     .eq('event_id', req.params.id)
     .eq('user_id', req.auth.sub)
-    .eq('status', 'accepted')
-    .select('id')
-    .maybeSingle()
 
   if (error) {
     console.error('Leaving event failed:', error.message)
     return res.status(500).json({ error: 'Failed to leave event' })
   }
-  if (!left) {
-    return res.status(400).json({ error: 'Ти не берешь участь у цьому заході' })
-  }
 
-  const { data: me } = await supabase.from('users').select('first_name').eq('id', req.auth.sub).single()
-  notifyEventPeople(
-    req.params.id, req.auth.sub,
-    (title) => `👋 ${me?.first_name ?? 'Учасник'} більше не бере участь у заході «${title}»`,
-  ).catch(() => {})
-  postSystemMessage(req.params.id, `👋 ${me?.first_name ?? 'Учасник'} більше не бере участь у заході.`)
+  // Only a former accepted participant frees a real spot — someone backing
+  // out of the waitlist doesn't need the broadcast or a promotion check.
+  if (existing.status === 'accepted') {
+    const { data: me } = await supabase.from('users').select('first_name').eq('id', req.auth.sub).single()
+    notifyEventPeople(
+      req.params.id, req.auth.sub,
+      (title) => `👋 ${me?.first_name ?? 'Учасник'} більше не бере участь у заході «${title}»`,
+    ).catch(() => {})
+    postSystemMessage(req.params.id, `👋 ${me?.first_name ?? 'Учасник'} більше не бере участь у заході.`)
+
+    promoteFromWaitlist(req.params.id).catch(() => {})
+  }
 
   res.json({ ok: true })
 })

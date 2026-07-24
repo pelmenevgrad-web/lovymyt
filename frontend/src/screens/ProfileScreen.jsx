@@ -368,6 +368,9 @@ export default function ProfileScreen() {
                       {e.needs_review && (
                         <span className="badge" style={{ background: 'var(--orange-light)', color: 'var(--orange)', flexShrink: 0 }}>Оціни</span>
                       )}
+                      {e.my_status === 'waitlisted' && (
+                        <span className="badge" style={{ background: 'var(--orange-light)', color: 'var(--orange)', flexShrink: 0 }}>У черзі</span>
+                      )}
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
                       {new Date(e.start_time).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}

@@ -260,8 +260,15 @@ export default function EventDetailScreen() {
     setJoining(true)
     setJoinError(null)
     try {
-      await apiFetch(`/events/${id}/join`, { method: 'POST' })
-      setEvent(e => ({ ...e, my_status: 'accepted', current_participants: e.current_participants + (e.my_status === 'accepted' ? 0 : 1) }))
+      const { participant, waitlist_position } = await apiFetch(`/events/${id}/join`, { method: 'POST' })
+      setEvent(e => ({
+        ...e,
+        my_status: participant.status,
+        current_participants: participant.status === 'accepted'
+          ? e.current_participants + (e.my_status === 'accepted' ? 0 : 1)
+          : e.current_participants,
+        waitlist_position: participant.status === 'waitlisted' ? waitlist_position : null,
+      }))
     } catch (err) {
       setJoinError(err.message)
     } finally {
@@ -275,7 +282,12 @@ export default function EventDetailScreen() {
     setJoinError(null)
     try {
       await apiFetch(`/events/${id}/leave`, { method: 'POST' })
-      setEvent(e => ({ ...e, my_status: 'left', current_participants: Math.max(0, e.current_participants - 1) }))
+      setEvent(e => ({
+        ...e,
+        my_status: 'left',
+        current_participants: e.my_status === 'accepted' ? Math.max(0, e.current_participants - 1) : e.current_participants,
+        waitlist_position: null,
+      }))
       setConfirmingLeave(false)
     } catch (err) {
       setJoinError(err.message)
@@ -310,6 +322,7 @@ export default function EventDetailScreen() {
   const budget = BUDGET_LABEL[event.budget_type] ?? BUDGET_LABEL.free
   const pct = Math.round((event.current_participants / event.max_participants) * 100)
   const alreadyJoined = event.my_status === 'accepted'
+  const isWaitlisted = event.my_status === 'waitlisted'
   const eventStarted = new Date(event.start_time) < new Date()
   const isEnded = event.status === 'completed' || event.status === 'cancelled'
   const canReview = eventStarted && (event.is_creator || alreadyJoined)
@@ -427,6 +440,7 @@ export default function EventDetailScreen() {
           <ConditionRow Icon={Users}>
             {event.current_participants}/{event.max_participants} учасників
             {event.min_participants ? ` (мінімум ${event.min_participants})` : ''}
+            {event.waitlist_count > 0 ? ` • ${event.waitlist_count} у черзі очікування` : ''}
           </ConditionRow>
           <ConditionRow Icon={budget.Icon}>
             {budget.label}{event.budget_amount ? ` — ${event.budget_amount} грн` : ''}
@@ -620,6 +634,28 @@ export default function EventDetailScreen() {
               Ви приєднались <Check size={18} />
             </button>
           )
+        ) : isWaitlisted && !isEnded ? (
+          confirmingLeave ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn" style={{ flex: 1, background: 'var(--red)', color: '#fff', opacity: leaving ? .6 : 1 }}
+                disabled={leaving} onClick={handleLeave}
+              >
+                {leaving ? 'Виходимо…' : 'Так, вийти зі списку'}
+              </button>
+              <button className="btn btn-ghost" style={{ flex: 1 }} disabled={leaving} onClick={() => setConfirmingLeave(false)}>
+                Назад
+              </button>
+            </div>
+          ) : (
+            <button
+              className="btn"
+              style={{ width: '100%', background: 'var(--orange-light)', color: 'var(--orange)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              onClick={() => setConfirmingLeave(true)}
+            >
+              <Clock size={18} /> У списку очікування{event.waitlist_position ? ` (#${event.waitlist_position})` : ''}
+            </button>
+          )
         ) : (
           <button
             className="btn btn-primary"
@@ -628,7 +664,11 @@ export default function EventDetailScreen() {
             onClick={handleJoin}
           >
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              {joining ? 'Приєднуємось…' : <>Приєднатися <Check size={18} /></>}
+              {joining
+                ? 'Приєднуємось…'
+                : event.max_participants && event.current_participants >= event.max_participants
+                  ? <>Стати у чергу <Clock size={18} /></>
+                  : <>Приєднатися <Check size={18} /></>}
             </span>
           </button>
         )}
