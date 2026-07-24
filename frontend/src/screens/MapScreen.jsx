@@ -212,7 +212,7 @@ export default function MapScreen() {
           />
 
           {filtered.map((event) => {
-            const cat = CATEGORIES.find(c => c.id === event.category_id) ?? CATEGORIES[1]
+            const cat = CATEGORIES.find(c => c.id === event.category_id) ?? CATEGORIES[0]
             const isActive = event.status === 'active'
             const joinableNow = isActive && event.late_join_allowed
             return (
