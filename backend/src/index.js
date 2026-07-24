@@ -1049,7 +1049,7 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
 app.post('/events/:id/complete', requireAuth, async (req, res) => {
   const { data: existing, error: fetchErr } = await supabase
     .from('events')
-    .select('creator_id')
+    .select('creator_id, status')
     .eq('id', req.params.id)
     .single()
 
@@ -1058,6 +1058,9 @@ app.post('/events/:id/complete', requireAuth, async (req, res) => {
   }
   if (existing.creator_id !== req.auth.sub) {
     return res.status(403).json({ error: 'Тільки організатор може завершити захід' })
+  }
+  if (existing.status === 'completed' || existing.status === 'cancelled') {
+    return res.status(400).json({ error: 'Захід вже завершено' })
   }
 
   const { data: row, error } = await supabase
@@ -1509,11 +1512,34 @@ app.post('/events/:id/reviews', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'reviews must be a non-empty array' })
   }
 
+  const { data: event, error: eventErr } = await supabase
+    .from('events')
+    .select('creator_id, status')
+    .eq('id', req.params.id)
+    .single()
+  if (eventErr) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  if (event.status !== 'completed') {
+    return res.status(400).json({ error: 'Оцінювати можна тільки завершені заходи' })
+  }
+
+  const { data: acceptedRows } = await supabase
+    .from('event_participants')
+    .select('user_id')
+    .eq('event_id', req.params.id)
+    .eq('status', 'accepted')
+  const eventPeople = new Set([event.creator_id, ...(acceptedRows ?? []).map(p => p.user_id)])
+
+  if (!eventPeople.has(req.auth.sub)) {
+    return res.status(403).json({ error: 'Ти не був учасником цього заходу' })
+  }
+
   const { data: validStatuses } = await supabase.from('funny_statuses').select('label').eq('is_active', true)
   const validLabels = new Set((validStatuses ?? []).map(s => s.label))
 
   const rows = reviews
-    .filter(r => r.to_user_id && r.to_user_id !== req.auth.sub && Number(r.rating) >= 1 && Number(r.rating) <= 5)
+    .filter(r => r.to_user_id && r.to_user_id !== req.auth.sub && eventPeople.has(r.to_user_id) && Number(r.rating) >= 1 && Number(r.rating) <= 5)
     .map(r => ({
       event_id: req.params.id,
       from_user_id: req.auth.sub,
