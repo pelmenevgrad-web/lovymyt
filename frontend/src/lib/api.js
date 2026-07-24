@@ -29,7 +29,13 @@ export async function apiFetch(path, options = {}) {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.error || `Request failed: ${res.status}`)
+    if (body.code === 'BANNED') {
+      localStorage.removeItem('lovymyt_token')
+      window.dispatchEvent(new CustomEvent('app:banned', { detail: { message: body.error } }))
+    }
+    const err = new Error(body.error || `Request failed: ${res.status}`)
+    err.code = body.code
+    throw err
   }
 
   return res.json()

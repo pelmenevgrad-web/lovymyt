@@ -274,7 +274,10 @@ app.post('/auth/telegram', async (req, res) => {
   }
 
   if (user.is_banned) {
-    return res.status(403).json({ error: `Тебе заблоковано.${user.ban_reason ? ` Причина: ${user.ban_reason}` : ''}` })
+    return res.status(403).json({
+      error: `Тебе заблоковано.${user.ban_reason ? ` Причина: ${user.ban_reason}` : ''}`,
+      code: 'BANNED',
+    })
   }
 
   const token = jwt.sign({ sub: user.id, telegram_id: user.telegram_id }, JWT_SECRET, { expiresIn: '30d' })
@@ -301,7 +304,10 @@ async function requireAuth(req, res, next) {
 
   const { data: user } = await supabase.from('users').select('is_banned, ban_reason').eq('id', req.auth.sub).single()
   if (user?.is_banned) {
-    return res.status(403).json({ error: `Тебе заблоковано.${user.ban_reason ? ` Причина: ${user.ban_reason}` : ''}` })
+    return res.status(403).json({
+      error: `Тебе заблоковано.${user.ban_reason ? ` Причина: ${user.ban_reason}` : ''}`,
+      code: 'BANNED',
+    })
   }
 
   next()

@@ -52,6 +52,23 @@ function Row({ ok, label, value }) {
   )
 }
 
+// Shown instead of the whole app the moment any API call comes back with
+// code:'BANNED' — requireAuth re-checks is_banned on every request, so this
+// can fire mid-session (not just at login) if an admin bans someone who's
+// already inside the app with a still-valid token.
+function BannedScreen({ message }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: 12, minHeight: 'var(--full-h)', padding: '0 32px', textAlign: 'center',
+    }}>
+      <XCircle size={40} color="#ef4444" />
+      <div style={{ fontWeight: 800, fontSize: 17 }}>Доступ обмежено</div>
+      <div style={{ fontSize: 14, color: 'var(--text-2)' }}>{message}</div>
+    </div>
+  )
+}
+
 function InitDebug({ step, info, error }) {
   const failed = step === 'failed'
   return (
@@ -110,11 +127,18 @@ export default function App() {
   const [tgInfo, setTgInfo]       = useState(null)
   const [initError, setInitError] = useState(null)
   const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem('lovymyt_terms_accepted'))
+  const [bannedMessage, setBannedMessage] = useState(null)
 
   function handleJoin() {
     localStorage.setItem('lovymyt_terms_accepted', Date.now().toString())
     setShowWelcome(false)
   }
+
+  useEffect(() => {
+    const onBanned = (e) => setBannedMessage(e.detail?.message || 'Тебе заблоковано.')
+    window.addEventListener('app:banned', onBanned)
+    return () => window.removeEventListener('app:banned', onBanned)
+  }, [])
 
   useEffect(() => {
     setStep('tg_check')
@@ -163,6 +187,10 @@ export default function App() {
 
   if (showWelcome) {
     return <WelcomeScreen onJoin={handleJoin} />
+  }
+
+  if (bannedMessage) {
+    return <BannedScreen message={bannedMessage} />
   }
 
   // Invite/notification links open as https://t.me/lovymyt_bot?startapp=event_<uuid>,
