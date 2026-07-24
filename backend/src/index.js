@@ -1247,6 +1247,13 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to join event' })
   }
 
+  // First participant flips it from "Планується" to "Збираються" — nothing
+  // else ever made this transition, so events sat as 'planned' forever
+  // even with a full roster.
+  if (event.status === 'planned') {
+    await supabase.from('events').update({ status: 'gathering' }).eq('id', req.params.id)
+  }
+
   notifyEventPeople(req.params.id, req.auth.sub, (title) =>
     `✅ ${joiner.first_name ?? 'Хтось'} приєднався до заходу «${title}»`,
   ).catch(() => {})
