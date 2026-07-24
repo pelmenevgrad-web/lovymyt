@@ -108,7 +108,7 @@ export default function App() {
   const [step, setStep]           = useState('mounting')
   const [tgInfo, setTgInfo]       = useState(null)
   const [initError, setInitError] = useState(null)
-  const [showWelcome, setShowWelcome] = useState(true)
+  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem('lovymyt_terms_accepted'))
 
   function handleJoin() {
     localStorage.setItem('lovymyt_terms_accepted', Date.now().toString())
