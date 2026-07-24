@@ -84,7 +84,7 @@ export default function LocationSearchPicker({
         signal: controller.signal,
       })
         .then(r => r.json())
-        .then(setSuggestions)
+        .then(data => setSuggestions(Array.isArray(data) ? data : []))
         .catch(() => {})
         .finally(() => setSearching(false))
     }, 500)
