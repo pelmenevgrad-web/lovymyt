@@ -1107,6 +1107,9 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
   if (event.status === 'completed' || event.status === 'cancelled') {
     return res.status(400).json({ error: 'Цей захід вже завершено' })
   }
+  if (event.status === 'active' && !event.conditions?.late_join_allowed) {
+    return res.status(403).json({ error: 'Захід вже почався, і організатор не дозволив приєднання після старту' })
+  }
 
   const { data: joiner, error: joinerErr } = await supabase
     .from('users')
