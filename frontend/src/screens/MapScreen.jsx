@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import WebApp from '@twa-dev/sdk'
-import { LocateFixed, Loader2 } from 'lucide-react'
+import { LocateFixed, Loader2, Search, SlidersHorizontal, X } from 'lucide-react'
 import CategoryChips from '../components/CategoryChips.jsx'
 import EventCard from '../components/EventCard.jsx'
 import { apiFetch } from '../lib/api.js'
@@ -12,6 +12,78 @@ import { MARKER_ICON_PATHS } from '../lib/markerIcons.js'
 
 // Kyiv center as default
 const DEFAULT_CENTER = [50.4501, 30.5234]
+
+const BUDGET_OPTIONS = [
+  { value: 'free', label: 'Безкоштовно' },
+  { value: 'each_pays', label: 'Кожен платить' },
+  { value: 'shared', label: 'Складчина' },
+]
+
+// Bottom sheet for the map's search-adjacent filters — budget type and an
+// "only events open to any age" toggle, applied live as chips are tapped.
+function FilterSheet({ budget, onBudgetChange, noAgeLimitOnly, onNoAgeLimitChange, onClose }) {
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000,
+        display: 'flex', alignItems: 'flex-end',
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="card"
+        style={{ width: '100%', borderRadius: '20px 20px 0 0', padding: 20 }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ fontWeight: 800, fontSize: 17 }}>Фільтри</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer' }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: .06, marginBottom: 8 }}>
+          Бюджет
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+          {BUDGET_OPTIONS.map(opt => {
+            const active = budget === opt.value
+            return (
+              <button
+                key={opt.value}
+                className="chip"
+                onClick={() => onBudgetChange(active ? null : opt.value)}
+                style={{
+                  background: active ? 'var(--accent)' : 'var(--card)',
+                  color: active ? '#fff' : 'var(--text)',
+                  border: '1.5px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
+                }}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: .06, marginBottom: 8 }}>
+          Вік
+        </div>
+        <button
+          className="chip"
+          onClick={() => onNoAgeLimitChange(!noAgeLimitOnly)}
+          style={{
+            width: '100%', justifyContent: 'center',
+            background: noAgeLimitOnly ? 'var(--accent)' : 'var(--card)',
+            color: noAgeLimitOnly ? '#fff' : 'var(--text)',
+            border: '1.5px solid ' + (noAgeLimitOnly ? 'var(--accent)' : 'var(--border)'),
+          }}
+        >
+          Без вікових обмежень
+        </button>
+      </div>
+    </div>
+  )
+}
 
 // Lightning-bolt badge path (lucide "Zap"), used to mark events that can
 // still be joined after they've started.
@@ -153,6 +225,11 @@ export default function MapScreen() {
   const mapRef = useRef(null)
   const [events, setEvents] = useState([])
   const [eventsLoaded, setEventsLoaded] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  const [budgetFilter, setBudgetFilter] = useState(null)
+  const [noAgeLimitOnly, setNoAgeLimitOnly] = useState(false)
 
   useEffect(() => {
     const onTheme = () =>
@@ -168,9 +245,17 @@ export default function MapScreen() {
       .finally(() => setEventsLoaded(true))
   }, [])
 
-  const filtered = selectedCat === 0
-    ? events
-    : events.filter(e => (e.category_ids ?? [e.category_id]).includes(selectedCat))
+  const filtered = events
+    .filter(e => selectedCat === 0 || (e.category_ids ?? [e.category_id]).includes(selectedCat))
+    .filter(e => !budgetFilter || e.budget_type === budgetFilter)
+    .filter(e => !noAgeLimitOnly || (!e.age_min && !e.age_max))
+    .filter(e => {
+      const q = searchQuery.trim().toLowerCase()
+      if (!q) return true
+      return e.title?.toLowerCase().includes(q) || e.address_text?.toLowerCase().includes(q)
+    })
+
+  const activeFilterCount = (budgetFilter ? 1 : 0) + (noAgeLimitOnly ? 1 : 0)
 
   const activeCategories = CATEGORIES.filter(cat =>
     cat.id === 0 || events.some(e => (e.category_ids ?? [e.category_id]).includes(cat.id))
@@ -190,8 +275,83 @@ export default function MapScreen() {
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 800,
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 10,
       }}>
+        <div style={{ display: 'flex', gap: 8, padding: '0 16px', marginBottom: 10 }}>
+          {showSearch ? (
+            <div style={{
+              flex: 1, display: 'flex', alignItems: 'center', gap: 6,
+              background: 'var(--card)', borderRadius: 999, padding: '0 8px 0 14px',
+              boxShadow: 'var(--shadow-md)',
+            }}>
+              <Search size={16} color="var(--text-3)" style={{ flexShrink: 0 }} />
+              <input
+                autoFocus
+                type="text"
+                placeholder="Пошук за назвою чи адресою…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{ flex: 1, border: 'none', background: 'none', padding: '10px 0' }}
+              />
+              <button
+                onClick={() => { setSearchQuery(''); setShowSearch(false) }}
+                style={{
+                  width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                  background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowSearch(true)}
+              style={{
+                width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+                background: 'var(--card)', border: 'none', cursor: 'pointer',
+                boxShadow: 'var(--shadow-md)', color: 'var(--text)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Search size={18} />
+            </button>
+          )}
+          <button
+            onClick={() => setShowFilters(true)}
+            style={{
+              position: 'relative', width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+              background: 'var(--card)', border: 'none', cursor: 'pointer',
+              boxShadow: 'var(--shadow-md)', color: 'var(--text)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <SlidersHorizontal size={18} />
+            {activeFilterCount > 0 && (
+              <span style={{
+                position: 'absolute', top: -2, right: -2,
+                width: 16, height: 16, borderRadius: '50%',
+                background: 'var(--accent)', color: '#fff',
+                fontSize: 10, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: '1.5px solid var(--card)',
+              }}>
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+        </div>
+
         <CategoryChips categories={activeCategories} selected={selectedCat} onChange={setSelectedCat} />
       </div>
+
+      {showFilters && (
+        <FilterSheet
+          budget={budgetFilter}
+          onBudgetChange={setBudgetFilter}
+          noAgeLimitOnly={noAgeLimitOnly}
+          onNoAgeLimitChange={setNoAgeLimitOnly}
+          onClose={() => setShowFilters(false)}
+        />
+      )}
 
       {/* Map — mounted only once we know real event locations, so it opens
           directly on the right view instead of starting at Kyiv and jumping */}
