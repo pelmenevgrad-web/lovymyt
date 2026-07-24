@@ -2290,6 +2290,20 @@ io.on('connection', (socket) => {
   })
 })
 
+// Flips planned/gathering events to 'active' once their start_time arrives —
+// nothing else in the app ever makes this transition, so without it events
+// sit as 'planned' forever (no "Зараз!" badge, late_join_allowed never
+// applies, admin's "Активні" count stays stuck at 0).
+async function sweepActivateEvents() {
+  const { error } = await supabase
+    .from('events')
+    .update({ status: 'active' })
+    .in('status', ['planned', 'gathering'])
+    .lte('start_time', new Date().toISOString())
+
+  if (error) console.error('Auto-activate sweep failed:', error.message)
+}
+
 // Auto-completes events past their end_time if the organizer hasn't already —
 // runs in-process since there's no separate cron/worker for this app.
 async function sweepExpiredEvents() {
@@ -2321,6 +2335,8 @@ async function start() {
   await new Promise((resolve) => httpServer.listen(PORT, resolve))
   console.log(`Backend listening on port ${PORT}`)
 
+  sweepActivateEvents()
+  setInterval(sweepActivateEvents, 5 * 60_000)
   sweepExpiredEvents()
   setInterval(sweepExpiredEvents, 5 * 60_000)
   sweepExpiredPro()
