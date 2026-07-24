@@ -395,6 +395,10 @@ export default function EventDetailScreen() {
           </span>
         </div>
 
+        {event.description && (
+          <p style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.5, marginBottom: 16 }}>{event.description}</p>
+        )}
+
         {/* Creator */}
         <div
           style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, cursor: 'pointer' }}
@@ -480,14 +484,6 @@ export default function EventDetailScreen() {
               {event.conditions?.verified_only && <ConditionRow Icon={BadgeCheck}>Тільки верифіковані учасники</ConditionRow>}
             </div>
           </>
-        )}
-
-        {event.description && (
-          <div style={{ margin: '0 0 16px' }} className="card">
-            <div style={{ padding: '14px 16px' }}>
-              <p style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.5 }}>{event.description}</p>
-            </div>
-          </div>
         )}
 
         {supplies.length > 0 && (
