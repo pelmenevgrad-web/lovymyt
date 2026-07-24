@@ -80,17 +80,16 @@ bot.on('message', async (ctx, next) => {
   }
 
   if (payload.type === 'topup') {
-    const { error } = await supabase
-      .from('users')
-      .update({ stars_balance: user.stars_balance + payload.stars })
-      .eq('id', user.id)
+    const { data: newBalance, error } = await supabase.rpc('credit_stars_balance', {
+      p_user_id: user.id, p_amount: payload.stars,
+    })
     if (error) return console.error('Crediting stars top-up failed:', error.message)
 
     await supabase.from('stars_transactions').insert({
       user_id: user.id, type: 'topup', amount: payload.stars,
       telegram_payment_charge_id: payment.telegram_payment_charge_id,
     })
-    ctx.reply(`✅ Нараховано ${payload.stars} Stars. Твій баланс: ${user.stars_balance + payload.stars}`).catch(() => {})
+    ctx.reply(`✅ Нараховано ${payload.stars} Stars. Твій баланс: ${newBalance}`).catch(() => {})
   } else if (payload.type === 'pro') {
     const base = isProActive(user) ? new Date(user.pro_expires_at) : new Date()
     const newExpiry = new Date(base.getTime() + PRO_DURATION_DAYS * 86_400_000)
@@ -536,36 +535,40 @@ app.post('/users/:id/gifts', requireAuth, async (req, res) => {
 
   const { data: sender, error: senderErr } = await supabase
     .from('users')
-    .select('stars_balance, first_name')
+    .select('first_name')
     .eq('id', req.auth.sub)
     .single()
   if (senderErr || !sender) {
     return res.status(500).json({ error: 'Failed to load sender' })
   }
-  if (sender.stars_balance < gift.price_stars) {
-    return res.status(400).json({ error: 'Недостатньо Stars на балансі' })
-  }
 
   const { data: recipient, error: recipientErr } = await supabase
     .from('users')
-    .select('stars_balance, telegram_id')
+    .select('telegram_id')
     .eq('id', req.params.id)
     .single()
   if (recipientErr || !recipient) {
     return res.status(404).json({ error: 'User not found' })
   }
 
-  const { error: debitErr } = await supabase
-    .from('users').update({ stars_balance: sender.stars_balance - gift.price_stars }).eq('id', req.auth.sub)
+  // Atomic RPCs (not read-then-write) so two near-simultaneous gifts from
+  // the same sender can't both pass a stale balance check and mint free Stars.
+  const { data: newBalance, error: debitErr } = await supabase.rpc('debit_stars_balance', {
+    p_user_id: req.auth.sub, p_amount: gift.price_stars,
+  })
   if (debitErr) {
+    if (debitErr.message?.includes('insufficient_balance')) {
+      return res.status(400).json({ error: 'Недостатньо Stars на балансі' })
+    }
     console.error('Debiting gift sender failed:', debitErr.message)
     return res.status(500).json({ error: 'Failed to send gift' })
   }
-  const { error: creditErr } = await supabase
-    .from('users').update({ stars_balance: recipient.stars_balance + gift.price_stars }).eq('id', req.params.id)
+  const { error: creditErr } = await supabase.rpc('credit_stars_balance', {
+    p_user_id: req.params.id, p_amount: gift.price_stars,
+  })
   if (creditErr) {
-    // best-effort rollback of the debit above
-    await supabase.from('users').update({ stars_balance: sender.stars_balance }).eq('id', req.auth.sub)
+    // roll back the debit above
+    await supabase.rpc('credit_stars_balance', { p_user_id: req.auth.sub, p_amount: gift.price_stars })
     console.error('Crediting gift recipient failed:', creditErr.message)
     return res.status(500).json({ error: 'Failed to send gift' })
   }
@@ -581,7 +584,7 @@ app.post('/users/:id/gifts', requireAuth, async (req, res) => {
 
   notifyUser(recipient.telegram_id, `🎁 ${sender.first_name ?? 'Хтось'} подарував(-ла) тобі: ${gift.name}!`, `user_${req.params.id}`, 'Відкрити профіль').catch(() => {})
 
-  res.status(201).json({ ok: true, stars_balance: sender.stars_balance - gift.price_stars })
+  res.status(201).json({ ok: true, stars_balance: newBalance })
 })
 
 // Complain about another user (harassment, no-show, inappropriate behavior…) —
@@ -2280,9 +2283,12 @@ app.get('/admin/verification-requests', requireAdmin, async (req, res) => {
 
 app.post('/admin/verification-requests/:id/approve', requireAdmin, async (req, res) => {
   const { data: request, error: fetchErr } = await supabase
-    .from('verification_requests').select('user_id').eq('id', req.params.id).single()
+    .from('verification_requests').select('user_id, status').eq('id', req.params.id).single()
   if (fetchErr || !request) {
     return res.status(404).json({ error: 'Request not found' })
+  }
+  if (request.status !== 'pending') {
+    return res.status(400).json({ error: 'Заявку вже розглянуто' })
   }
 
   const { error: userErr } = await supabase.from('users').update({ is_verified: true }).eq('id', request.user_id)
@@ -2314,9 +2320,12 @@ app.post('/admin/verification-requests/:id/reject', requireAdmin, async (req, re
   }
 
   const { data: request, error: fetchErr } = await supabase
-    .from('verification_requests').select('user_id').eq('id', req.params.id).single()
+    .from('verification_requests').select('user_id, status').eq('id', req.params.id).single()
   if (fetchErr || !request) {
     return res.status(404).json({ error: 'Request not found' })
+  }
+  if (request.status !== 'pending') {
+    return res.status(400).json({ error: 'Заявку вже розглянуто' })
   }
 
   const { data, error } = await supabase
@@ -2392,7 +2401,7 @@ app.post('/admin/stars-transactions/:id/refund', requireAdmin, async (req, res) 
   }
 
   if (tx.type === 'topup') {
-    await supabase.from('users').update({ stars_balance: Math.max(0, user.stars_balance - tx.amount) }).eq('id', tx.user_id)
+    await supabase.rpc('debit_stars_balance', { p_user_id: tx.user_id, p_amount: tx.amount, p_floor_zero: true })
   } else if (tx.type === 'pro_purchase') {
     const rolledBack = isProActive(user) ? new Date(new Date(user.pro_expires_at).getTime() - PRO_DURATION_DAYS * 86_400_000) : null
     if (rolledBack && rolledBack > new Date()) {
