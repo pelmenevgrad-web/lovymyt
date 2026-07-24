@@ -166,9 +166,11 @@ export default function App() {
   }
 
   // Invite/notification links open as https://t.me/lovymyt_bot?startapp=event_<uuid>,
-  // chat_<uuid> or user_<uuid> — land straight on that event/chat/profile instead of the map.
+  // chat_<uuid>, review_<uuid> or user_<uuid> — land straight on that
+  // event/chat/review/profile instead of the map.
   const startParam = WebApp.initDataUnsafe?.start_param
   const initialPath = startParam?.startsWith('chat_') ? `/events/${startParam.slice('chat_'.length)}/chat`
+    : startParam?.startsWith('review_') ? `/events/${startParam.slice('review_'.length)}/review`
     : startParam?.startsWith('event_') ? `/events/${startParam.slice('event_'.length)}`
     : startParam?.startsWith('user_') ? `/users/${startParam.slice('user_'.length)}`
     : startParam === 'profile' ? '/profile'

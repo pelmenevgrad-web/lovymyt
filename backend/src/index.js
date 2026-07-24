@@ -1047,6 +1047,12 @@ app.post('/events/:id/complete', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to complete event' })
   }
 
+  notifyEventPeople(
+    req.params.id, null,
+    (title) => `✅ Захід «${title}» завершено — оціни учасників, це впливає на їхню надійність і кумедні звання.`,
+    `review_${req.params.id}`, 'Оцінити',
+  ).catch(() => {})
+
   res.json({ event: shapeEvent(row, req.auth.sub) })
 })
 
@@ -1190,8 +1196,23 @@ app.get('/users/me/events', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to load your events' })
   }
 
+  const completedIds = data.filter(row => row.status === 'completed').map(row => row.id)
+  const reviewedIds = new Set()
+  if (completedIds.length > 0) {
+    const { data: myReviews } = await supabase
+      .from('reviews')
+      .select('event_id')
+      .eq('from_user_id', req.auth.sub)
+      .in('event_id', completedIds)
+    for (const r of myReviews ?? []) reviewedIds.add(r.event_id)
+  }
+
   res.json({
-    events: data.map(row => ({ ...shapeEvent(row, req.auth.sub), is_creator: row.creator_id === req.auth.sub })),
+    events: data.map(row => ({
+      ...shapeEvent(row, req.auth.sub),
+      is_creator: row.creator_id === req.auth.sub,
+      needs_review: row.status === 'completed' && !reviewedIds.has(row.id),
+    })),
   })
 })
 
@@ -2486,14 +2507,30 @@ async function sweepActivateEvents() {
 // Auto-completes events past their end_time if the organizer hasn't already —
 // runs in-process since there's no separate cron/worker for this app.
 async function sweepExpiredEvents() {
-  const { error } = await supabase
+  const { data: candidates, error: selectErr } = await supabase
     .from('events')
-    .update({ status: 'completed' })
+    .select('id')
     .in('status', ['planned', 'gathering', 'active'])
     .not('end_time', 'is', null)
     .lt('end_time', new Date().toISOString())
 
-  if (error) console.error('Auto-complete sweep failed:', error.message)
+  if (selectErr) return console.error('Auto-complete sweep failed:', selectErr.message)
+  if (!candidates || candidates.length === 0) return
+
+  const { error } = await supabase
+    .from('events')
+    .update({ status: 'completed' })
+    .in('id', candidates.map(e => e.id))
+
+  if (error) return console.error('Auto-complete sweep failed:', error.message)
+
+  await Promise.all(candidates.map(event =>
+    notifyEventPeople(
+      event.id, null,
+      (title) => `✅ Захід «${title}» завершено — оціни учасників, це впливає на їхню надійність і кумедні звання.`,
+      `review_${event.id}`, 'Оцінити',
+    ).catch(() => {}),
+  ))
 }
 
 // Flips is_pro back to false once pro_expires_at has passed — the frontend

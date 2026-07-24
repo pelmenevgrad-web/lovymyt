@@ -365,6 +365,9 @@ export default function ProfileScreen() {
                       {e.is_creator && (
                         <span className="badge" style={{ background: 'var(--accent-light)', color: 'var(--accent)', flexShrink: 0 }}>Організатор</span>
                       )}
+                      {e.needs_review && (
+                        <span className="badge" style={{ background: 'var(--orange-light)', color: 'var(--orange)', flexShrink: 0 }}>Оціни</span>
+                      )}
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
                       {new Date(e.start_time).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
