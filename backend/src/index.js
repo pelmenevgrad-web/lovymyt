@@ -688,6 +688,8 @@ function shapeEvent(row) {
     max_male: row.max_male,
     max_female: row.max_female,
     late_join_allowed: late_join_allowed ?? false,
+    min_participants: row.min_participants,
+    force_continue: row.force_continue ?? false,
     conditions,
   }
 }
@@ -1011,6 +1013,41 @@ app.post('/events/:id/complete', requireAuth, async (req, res) => {
   if (error) {
     console.error('Completing event failed:', error.message)
     return res.status(500).json({ error: 'Failed to complete event' })
+  }
+
+  res.json({ event: shapeEvent(row) })
+})
+
+// Organizer confirms the event should run even though min_participants
+// hasn't been reached — otherwise sweepActivateEvents would cancel it once
+// start_time arrives (see the low-turnout warning it gets an hour before).
+app.post('/events/:id/continue-anyway', requireAuth, async (req, res) => {
+  const { data: existing, error: fetchErr } = await supabase
+    .from('events')
+    .select('creator_id, status')
+    .eq('id', req.params.id)
+    .single()
+
+  if (fetchErr) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  if (existing.creator_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки організатор може підтвердити продовження' })
+  }
+  if (existing.status !== 'planned' && existing.status !== 'gathering') {
+    return res.status(400).json({ error: 'Захід вже розпочався або завершився' })
+  }
+
+  const { data: row, error } = await supabase
+    .from('events')
+    .update({ force_continue: true })
+    .eq('id', req.params.id)
+    .select(EVENT_SELECT)
+    .single()
+
+  if (error) {
+    console.error('Forcing event continuation failed:', error.message)
+    return res.status(500).json({ error: 'Failed to update event' })
   }
 
   res.json({ event: shapeEvent(row) })
@@ -2290,18 +2327,82 @@ io.on('connection', (socket) => {
   })
 })
 
+// Counts accepted participants per event — sweeps work off raw event rows,
+// not the shaped/joined response, so they need this looked up separately.
+async function countAcceptedParticipants(eventIds) {
+  if (eventIds.length === 0) return new Map()
+  const { data } = await supabase
+    .from('event_participants')
+    .select('event_id')
+    .in('event_id', eventIds)
+    .eq('status', 'accepted')
+  const counts = new Map()
+  for (const { event_id } of data ?? []) {
+    counts.set(event_id, (counts.get(event_id) ?? 0) + 1)
+  }
+  return counts
+}
+
+// Warns the organizer + joined participants once, an hour out, if an event
+// still hasn't reached min_participants — gives the organizer a window to
+// force it to run anyway before the activation sweep would cancel it outright.
+async function sweepLowTurnoutWarnings() {
+  const oneHourFromNow = new Date(Date.now() + 60 * 60_000).toISOString()
+  const { data: candidates, error } = await supabase
+    .from('events')
+    .select('id, title, min_participants')
+    .in('status', ['planned', 'gathering'])
+    .not('min_participants', 'is', null)
+    .is('low_turnout_notified_at', null)
+    .eq('force_continue', false)
+    .lte('start_time', oneHourFromNow)
+    .gt('start_time', new Date().toISOString())
+
+  if (error) return console.error('Low-turnout warning sweep failed:', error.message)
+  if (!candidates || candidates.length === 0) return
+
+  const counts = await countAcceptedParticipants(candidates.map(e => e.id))
+  const short = candidates.filter(e => (counts.get(e.id) ?? 0) < e.min_participants)
+
+  await Promise.all(short.map(async (event) => {
+    await notifyEventPeople(
+      event.id, null,
+      (title) => `⚠️ До заходу «${title}» лишилась менше години, а мінімум учасників (${event.min_participants}) ще не набрано. Організатор може продовжити захід з тими, хто вже зібрався — інакше він автоматично скасується.`,
+    ).catch(() => {})
+    await supabase.from('events').update({ low_turnout_notified_at: new Date().toISOString() }).eq('id', event.id)
+  }))
+}
+
 // Flips planned/gathering events to 'active' once their start_time arrives —
 // nothing else in the app ever makes this transition, so without it events
 // sit as 'planned' forever (no "Зараз!" badge, late_join_allowed never
-// applies, admin's "Активні" count stays stuck at 0).
+// applies, admin's "Активні" count stays stuck at 0). Events under
+// min_participants get cancelled instead, unless the organizer forced it.
 async function sweepActivateEvents() {
-  const { error } = await supabase
+  const { data: candidates, error } = await supabase
     .from('events')
-    .update({ status: 'active' })
+    .select('id, title, min_participants, force_continue')
     .in('status', ['planned', 'gathering'])
     .lte('start_time', new Date().toISOString())
 
-  if (error) console.error('Auto-activate sweep failed:', error.message)
+  if (error) return console.error('Auto-activate sweep failed:', error.message)
+  if (!candidates || candidates.length === 0) return
+
+  const needsCheck = candidates.filter(e => e.min_participants && !e.force_continue)
+  const counts = await countAcceptedParticipants(needsCheck.map(e => e.id))
+  const toCancel = needsCheck.filter(e => (counts.get(e.id) ?? 0) < e.min_participants)
+  const cancelIds = new Set(toCancel.map(e => e.id))
+  const toActivate = candidates.filter(e => !cancelIds.has(e.id))
+
+  if (toCancel.length > 0) {
+    await supabase.from('events').update({ status: 'cancelled' }).in('id', toCancel.map(e => e.id))
+    await Promise.all(toCancel.map(event =>
+      notifyEventPeople(event.id, null, (title) => `❌ Захід «${title}» скасовано — не набралось мінімальної кількості учасників.`).catch(() => {}),
+    ))
+  }
+  if (toActivate.length > 0) {
+    await supabase.from('events').update({ status: 'active' }).in('id', toActivate.map(e => e.id))
+  }
 }
 
 // Auto-completes events past their end_time if the organizer hasn't already —
@@ -2335,6 +2436,8 @@ async function start() {
   await new Promise((resolve) => httpServer.listen(PORT, resolve))
   console.log(`Backend listening on port ${PORT}`)
 
+  sweepLowTurnoutWarnings()
+  setInterval(sweepLowTurnoutWarnings, 5 * 60_000)
   sweepActivateEvents()
   setInterval(sweepActivateEvents, 5 * 60_000)
   sweepExpiredEvents()

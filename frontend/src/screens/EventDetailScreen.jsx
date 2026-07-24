@@ -164,6 +164,7 @@ export default function EventDetailScreen() {
   const [confirmingComplete, setConfirmingComplete] = useState(false)
   const [completing, setCompleting] = useState(false)
   const [completeError, setCompleteError] = useState(null)
+  const [continuing, setContinuing] = useState(false)
   const [, forceTick] = useState(0)
 
   // Keeps the countdown to start ticking without needing a full data refetch
@@ -207,6 +208,19 @@ export default function EventDetailScreen() {
       setSupplies(fresh)
     } catch (err) {
       console.error('[EventDetail] claim failed:', err.message)
+    }
+  }
+
+  async function handleContinueAnyway() {
+    if (continuing) return
+    setContinuing(true)
+    try {
+      const { event: updated } = await apiFetch(`/events/${id}/continue-anyway`, { method: 'POST' })
+      setEvent(updated)
+    } catch (err) {
+      console.error('[EventDetail] continue-anyway failed:', err.message)
+    } finally {
+      setContinuing(false)
     }
   }
 
@@ -282,6 +296,10 @@ export default function EventDetailScreen() {
   const eventStarted = new Date(event.start_time) < new Date()
   const isEnded = event.status === 'completed' || event.status === 'cancelled'
   const canReview = eventStarted && (event.is_creator || alreadyJoined)
+  const belowMinimum = event.min_participants
+    && event.current_participants < event.min_participants
+    && (event.status === 'planned' || event.status === 'gathering')
+    && !event.force_continue
 
   function handleInvite() {
     shareViaTelegram(
@@ -468,6 +486,30 @@ export default function EventDetailScreen() {
           </>
         )}
       </div>
+
+      {/* Low turnout warning */}
+      {belowMinimum && (
+        <div style={{ margin: '0 16px 16px' }} className="card">
+          <div style={{ padding: '14px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <AlertTriangle size={16} color="var(--orange)" />
+              <span style={{ fontWeight: 700, fontSize: 14 }}>Мало учасників</span>
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: event.is_creator ? 10 : 0 }}>
+              Зібралось {event.current_participants} з мінімум {event.min_participants} — якщо до початку заходу
+              набір не заповниться, він автоматично скасується.
+            </p>
+            {event.is_creator && (
+              <button
+                className="btn btn-ghost" style={{ width: '100%', opacity: continuing ? .6 : 1 }}
+                disabled={continuing} onClick={handleContinueAnyway}
+              >
+                {continuing ? 'Зберігаємо…' : 'Продовжити попри неповний набір'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Join CTA */}
       <div style={{ padding: '8px 16px 24px' }}>
