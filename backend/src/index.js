@@ -565,6 +565,86 @@ app.post('/pro/subscribe', requireAuth, async (req, res) => {
   }
 })
 
+// ── Nearby POIs (gas stations / shops via Overpass) ──────────────────────
+// Proxied through the backend rather than called directly from the client:
+// the public Overpass mirrors turned out to be considerably flakier than
+// expected in practice (intermittent timeouts/rate-limits under normal
+// load, unrelated to any specific client), and every phone hitting Overpass
+// directly shares no rate-limit budget with any other — proxying lets many
+// nearby lookups share one small in-memory cache and gives the retry logic
+// a stable server IP instead of restarting the budget on every request.
+const POI_CACHE_TTL_MS = 10 * 60_000
+const poiCache = new Map() // `${lat},${lng},${radius}` -> { data, expires }
+const OVERPASS_MIRRORS = [
+  { url: 'https://z.overpass-api.de/api/interpreter' },
+  { url: 'https://overpass-api.de/api/interpreter', headers: { Referer: 'https://overpass-turbo.eu/' } },
+]
+
+async function fetchOverpassPOIs(lat, lng, radiusMeters) {
+  const query = `[out:json][timeout:15];(
+    node["amenity"="fuel"](around:${radiusMeters},${lat},${lng});
+    node["shop"~"^(supermarket|convenience|grocery)$"](around:${radiusMeters},${lat},${lng});
+  );out center 30;`
+
+  for (const mirror of OVERPASS_MIRRORS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 10_000)
+        let res
+        try {
+          res = await fetch(mirror.url, {
+            method: 'POST',
+            headers: mirror.headers,
+            body: 'data=' + encodeURIComponent(query),
+            signal: controller.signal,
+          })
+        } finally {
+          clearTimeout(timer)
+        }
+        const text = await res.text()
+        const data = JSON.parse(text) // throws on the HTML error bodies Overpass sometimes 200s back
+        return (data.elements ?? [])
+          .map(el => ({
+            id: el.id,
+            lat: el.lat ?? el.center?.lat,
+            lng: el.lon ?? el.center?.lon,
+            name: el.tags?.name || (el.tags?.amenity === 'fuel' ? 'Заправка' : 'Магазин'),
+            kind: el.tags?.amenity === 'fuel' ? 'fuel' : 'shop',
+          }))
+          .filter(p => p.lat != null && p.lng != null)
+      } catch (err) {
+        console.error(`Overpass attempt failed (${mirror.url}):`, err.message)
+      }
+    }
+  }
+  throw new Error('All Overpass mirrors failed')
+}
+
+app.get('/nearby-pois', requireAuth, async (req, res) => {
+  const lat = Number(req.query.lat)
+  const lng = Number(req.query.lng)
+  const radiusMeters = Number(req.query.radius) || 1500
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ error: 'lat/lng required' })
+  }
+
+  const cacheKey = `${lat.toFixed(3)},${lng.toFixed(3)},${radiusMeters}`
+  const cached = poiCache.get(cacheKey)
+  if (cached && cached.expires > Date.now()) {
+    return res.json({ pois: cached.data })
+  }
+
+  try {
+    const pois = await fetchOverpassPOIs(lat, lng, radiusMeters)
+    poiCache.set(cacheKey, { data: pois, expires: Date.now() + POI_CACHE_TTL_MS })
+    res.json({ pois })
+  } catch (err) {
+    console.error('Fetching nearby POIs failed:', err.message)
+    res.status(503).json({ error: 'Overpass тимчасово недоступний' })
+  }
+})
+
 // ── Venues (Реклама локацій) ─────────────────────────────────────────────
 // A venue owner (e.g. gazebos by a lake) advertises their spot; admin
 // moderates for free, then the owner pays real Stars to activate a tier
