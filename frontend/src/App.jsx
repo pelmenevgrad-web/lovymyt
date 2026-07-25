@@ -31,6 +31,10 @@ import CreateVenueScreen from './screens/CreateVenueScreen.jsx'
 import VenueDetailScreen from './screens/VenueDetailScreen.jsx'
 import VenueChatScreen from './screens/VenueChatScreen.jsx'
 import VenueInquiriesScreen from './screens/VenueInquiriesScreen.jsx'
+import ClubsScreen from './screens/ClubsScreen.jsx'
+import MyClubsScreen from './screens/MyClubsScreen.jsx'
+import CreateClubScreen from './screens/CreateClubScreen.jsx'
+import ClubDetailScreen from './screens/ClubDetailScreen.jsx'
 import WelcomeScreen from './screens/WelcomeScreen.jsx'
 import { useAuth } from './context/AuthContext.jsx'
 
@@ -247,6 +251,11 @@ export default function App() {
         <Route path="/venues/:id/inquiries" element={<VenueInquiriesScreen />} />
         <Route path="/venues/inquiries/:inquiryId" element={<VenueChatScreen />} />
         <Route path="/venues/:id" element={<VenueDetailScreen />} />
+        <Route path="/clubs" element={<ClubsScreen />} />
+        <Route path="/clubs/mine" element={<MyClubsScreen />} />
+        <Route path="/clubs/new" element={<CreateClubScreen />} />
+        <Route path="/clubs/:id/edit" element={<CreateClubScreen />} />
+        <Route path="/clubs/:id" element={<ClubDetailScreen />} />
       </Routes>
       <BottomNav />
     </MemoryRouter>

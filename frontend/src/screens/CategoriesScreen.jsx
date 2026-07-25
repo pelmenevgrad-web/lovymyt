@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Trophy, Crown } from 'lucide-react'
+import { Trophy, Crown, Repeat } from 'lucide-react'
 import { useCategories } from '../context/CategoriesContext.jsx'
 import { apiFetch } from '../lib/api.js'
 
@@ -64,6 +64,28 @@ export default function CategoriesScreen() {
         <div>
           <div style={{ fontWeight: 700, fontSize: 15 }}>Топ організаторів</div>
           <div style={{ fontSize: 12, opacity: .9, marginTop: 2 }}>Найкращі за оцінками учасників</div>
+        </div>
+      </div>
+
+      <div
+        className="card"
+        onClick={() => navigate('/clubs')}
+        style={{
+          padding: 16, marginBottom: 16, cursor: 'pointer', userSelect: 'none',
+          display: 'flex', alignItems: 'center', gap: 12,
+          background: 'linear-gradient(135deg, #22C55E, #0EA5E9)', color: '#fff',
+        }}
+      >
+        <div style={{
+          width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+          background: 'rgba(255,255,255,.25)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Repeat size={22} />
+        </div>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>Клуби</div>
+          <div style={{ fontSize: 12, opacity: .9, marginTop: 2 }}>Регулярні заходи — підпишись і не пропускай</div>
         </div>
       </div>
 

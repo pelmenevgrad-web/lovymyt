@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History, ShieldEllipsis, MapPin } from 'lucide-react'
+import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History, ShieldEllipsis, MapPin, Repeat } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/EventCard.jsx'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
@@ -231,13 +231,20 @@ export default function ProfileScreen() {
         </button>
       </div>
 
-      <div style={{ margin: '12px 16px 0' }}>
+      <div style={{ margin: '12px 16px 0', display: 'flex', gap: 8 }}>
         <button
           className="btn btn-ghost"
-          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
           onClick={() => navigate('/venues/mine')}
         >
-          <MapPin size={16} /> Мої локації (реклама)
+          <MapPin size={16} /> Мої локації
+        </button>
+        <button
+          className="btn btn-ghost"
+          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+          onClick={() => navigate('/clubs/mine')}
+        >
+          <Repeat size={16} /> Мої клуби
         </button>
       </div>
 

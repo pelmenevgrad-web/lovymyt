@@ -97,6 +97,7 @@ export default function CreateScreen() {
     supplies: [],
     cover_image: null,
     radius_visibility: 'public',
+    club_id: null,
   })
 
   const [submitting, setSubmitting] = useState(false)
@@ -169,6 +170,26 @@ export default function CreateScreen() {
         ...f, address_text: venue.address_text, lat: venue.lat, lng: venue.lng, cover_image: venue.photo_url,
       })))
       .catch(err => console.error('[Create] failed to prefill from venue:', err.message))
+  }, [isEdit, searchParams])
+
+  // Coming from a club's "Створити наступний захід" button — pre-fill
+  // title/category/description/cover from the club template and tag the
+  // new event with club_id so subscribers get notified on submit.
+  useEffect(() => {
+    if (isEdit) return
+    const clubIdParam = searchParams.get('club_id')
+    if (!clubIdParam) return
+    apiFetch(`/clubs/${clubIdParam}`)
+      .then(({ club }) => setForm(f => ({
+        ...f,
+        title: club.title,
+        description: club.description ?? '',
+        category_ids: club.category_id ? [club.category_id] : f.category_ids,
+        cover_image: club.cover_image_url ?? f.cover_image,
+        club_id: club.id,
+        start_time: searchParams.get('suggested_date') || f.start_time,
+      })))
+      .catch(err => console.error('[Create] failed to prefill from club:', err.message))
   }, [isEdit, searchParams])
 
   // Debounced nearby-venue-ad lookup whenever the picked location changes.
@@ -244,6 +265,7 @@ export default function CreateScreen() {
           conditions: form.conditions,
           cover_image: form.cover_image,
           radius_visibility: form.radius_visibility,
+          club_id: form.club_id,
         }),
       })
 

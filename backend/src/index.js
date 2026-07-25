@@ -201,6 +201,26 @@ async function notifyEventPeople(eventId, excludeUserId, textBuilder, startParam
   await Promise.all([...recipients.values()].map(tgId => notifyUser(tgId, text, startParam, buttonLabel)))
 }
 
+// Same idea as notifyEventPeople, but for a club's subscriber list rather
+// than one event's participants — used when a new occurrence is created.
+async function notifyClubSubscribers(clubId, excludeUserId, textBuilder, startParam, buttonLabel) {
+  const { data: subs } = await supabase
+    .from('club_subscribers')
+    .select('user:users(id, telegram_id)')
+    .eq('club_id', clubId)
+  if (!subs) return
+
+  const recipients = new Map()
+  for (const s of subs) {
+    if (s.user && s.user.id !== excludeUserId && s.user.telegram_id) {
+      recipients.set(s.user.id, s.user.telegram_id)
+    }
+  }
+
+  const text = textBuilder()
+  await Promise.all([...recipients.values()].map(tgId => notifyUser(tgId, text, startParam, buttonLabel)))
+}
+
 // Posts a system (sender-less) message into an event's chat, so anyone who
 // opens the chat later sees what happened even if they missed the Telegram
 // push — join/leave/decline/cancel/complete/edit all call this alongside
@@ -877,6 +897,172 @@ app.post('/venues/inquiries/:inquiryId/messages', requireAuth, async (req, res) 
   }
 })
 
+// ── Clubs (регулярні заходи) ─────────────────────────────────────────────
+// A club is a lightweight recurring-event template: the organizer creates
+// it once, people subscribe once, and every new occurrence (a normal
+// events row tagged with club_id) notifies all subscribers automatically —
+// no re-creating the event and losing the audience every week.
+
+const CLUB_SELECT = 'id, creator_id, title, description, category_id, cover_image_url, weekday, time_of_day, created_at'
+
+app.post('/clubs', requireAuth, async (req, res) => {
+  const { title, description, category_id, cover_image, weekday, time_of_day } = req.body ?? {}
+  if (!title?.trim()) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+  if (weekday != null && (!Number.isInteger(Number(weekday)) || weekday < 0 || weekday > 6)) {
+    return res.status(400).json({ error: 'weekday must be 0-6' })
+  }
+
+  try {
+    const cover_image_url = cover_image ? await uploadImageDataUrl(cover_image, 'chat-images', `clubs/${req.auth.sub}`) : null
+    const { data, error } = await supabase
+      .from('clubs')
+      .insert({
+        creator_id: req.auth.sub, title: title.trim(), description: description?.trim() || null,
+        category_id: category_id || null, cover_image_url,
+        weekday: weekday != null ? Number(weekday) : null, time_of_day: time_of_day || null,
+      })
+      .select(CLUB_SELECT)
+      .single()
+    if (error) throw error
+    res.status(201).json({ club: data })
+  } catch (err) {
+    if (err instanceof ImageUploadError) {
+      return res.status(400).json({ error: err.message })
+    }
+    console.error('Creating club failed:', err.message)
+    res.status(500).json({ error: 'Failed to create club' })
+  }
+})
+
+app.get('/clubs', async (_req, res) => {
+  const { data, error } = await supabase
+    .from('clubs')
+    .select(`${CLUB_SELECT}, subscribers:club_subscribers(count)`)
+    .order('created_at', { ascending: false })
+  if (error) {
+    console.error('Fetching clubs failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load clubs' })
+  }
+  res.json({ clubs: data.map(c => ({ ...c, subscribers: undefined, subscriber_count: c.subscribers?.[0]?.count ?? 0 })) })
+})
+
+app.get('/clubs/mine', requireAuth, async (req, res) => {
+  const [{ data: created, error: createdErr }, { data: subscribedRows, error: subErr }] = await Promise.all([
+    supabase.from('clubs').select(CLUB_SELECT).eq('creator_id', req.auth.sub).order('created_at', { ascending: false }),
+    supabase.from('club_subscribers').select(`club:clubs(${CLUB_SELECT})`).eq('user_id', req.auth.sub),
+  ])
+  if (createdErr || subErr) {
+    console.error('Fetching my clubs failed:', createdErr?.message ?? subErr?.message)
+    return res.status(500).json({ error: 'Failed to load clubs' })
+  }
+
+  const createdIds = new Set((created ?? []).map(c => c.id))
+  const subscribed = (subscribedRows ?? [])
+    .map(r => r.club)
+    .filter(c => c && !createdIds.has(c.id))
+
+  res.json({
+    created: (created ?? []).map(c => ({ ...c, is_creator: true })),
+    subscribed: subscribed.map(c => ({ ...c, is_creator: false })),
+  })
+})
+
+app.get('/clubs/:id', async (req, res) => {
+  const { data: club, error } = await supabase
+    .from('clubs')
+    .select(`${CLUB_SELECT}, subscribers:club_subscribers(count)`)
+    .eq('id', req.params.id)
+    .single()
+  if (error) {
+    return res.status(404).json({ error: 'Club not found' })
+  }
+
+  const auth = tryAuth(req)
+  let is_subscribed = false
+  if (auth) {
+    const { data: sub } = await supabase
+      .from('club_subscribers').select('user_id').eq('club_id', req.params.id).eq('user_id', auth.sub).maybeSingle()
+    is_subscribed = !!sub
+  }
+
+  const now = new Date().toISOString()
+  const [{ data: upcoming }, { data: past }] = await Promise.all([
+    supabase.from('events').select(EVENT_SELECT)
+      .eq('club_id', req.params.id).in('status', ['planned', 'gathering', 'active']).order('start_time', { ascending: true }),
+    supabase.from('events').select(EVENT_SELECT)
+      .eq('club_id', req.params.id).eq('status', 'completed').order('start_time', { ascending: false }).limit(10),
+  ])
+
+  res.json({
+    club: {
+      ...club, subscribers: undefined, subscriber_count: club.subscribers?.[0]?.count ?? 0,
+      is_subscribed, is_creator: auth?.sub === club.creator_id,
+      upcoming_events: (upcoming ?? []).map(e => shapeEvent(e, auth?.sub)),
+      past_events: (past ?? []).map(e => shapeEvent(e, auth?.sub)),
+    },
+  })
+})
+
+app.patch('/clubs/:id', requireAuth, async (req, res) => {
+  const { data: existing, error: fetchErr } = await supabase.from('clubs').select('creator_id').eq('id', req.params.id).single()
+  if (fetchErr) {
+    return res.status(404).json({ error: 'Club not found' })
+  }
+  if (existing.creator_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки організатор може редагувати клуб' })
+  }
+
+  const { title, description, category_id, cover_image, weekday, time_of_day } = req.body ?? {}
+  if (!title?.trim()) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+  if (weekday != null && (!Number.isInteger(Number(weekday)) || weekday < 0 || weekday > 6)) {
+    return res.status(400).json({ error: 'weekday must be 0-6' })
+  }
+
+  try {
+    const patch = {
+      title: title.trim(), description: description?.trim() || null, category_id: category_id || null,
+      weekday: weekday != null ? Number(weekday) : null, time_of_day: time_of_day || null,
+    }
+    if (cover_image?.startsWith('data:')) {
+      patch.cover_image_url = await uploadImageDataUrl(cover_image, 'chat-images', `clubs/${req.auth.sub}`)
+    }
+    const { data, error } = await supabase.from('clubs').update(patch).eq('id', req.params.id).select(CLUB_SELECT).single()
+    if (error) throw error
+    res.json({ club: data })
+  } catch (err) {
+    if (err instanceof ImageUploadError) {
+      return res.status(400).json({ error: err.message })
+    }
+    console.error('Updating club failed:', err.message)
+    res.status(500).json({ error: 'Failed to update club' })
+  }
+})
+
+app.post('/clubs/:id/subscribe', requireAuth, async (req, res) => {
+  const { error } = await supabase
+    .from('club_subscribers')
+    .upsert({ club_id: req.params.id, user_id: req.auth.sub }, { onConflict: 'club_id,user_id' })
+  if (error) {
+    console.error('Subscribing to club failed:', error.message)
+    return res.status(500).json({ error: 'Failed to subscribe' })
+  }
+  res.json({ ok: true })
+})
+
+app.post('/clubs/:id/unsubscribe', requireAuth, async (req, res) => {
+  const { error } = await supabase
+    .from('club_subscribers').delete().eq('club_id', req.params.id).eq('user_id', req.auth.sub)
+  if (error) {
+    console.error('Unsubscribing from club failed:', error.message)
+    return res.status(500).json({ error: 'Failed to unsubscribe' })
+  }
+  res.json({ ok: true })
+})
+
 // Public list of event categories — icon_name is a lucide-react component name
 app.get('/categories', async (_req, res) => {
   const { data, error } = await supabase
@@ -1159,6 +1345,7 @@ function shapeEvent(row, viewerId = null) {
     late_join_allowed: late_join_allowed ?? false,
     min_participants: row.min_participants,
     force_continue: row.force_continue ?? false,
+    club_id: row.club_id ?? null,
     conditions,
   }
 }
@@ -1299,8 +1486,17 @@ app.post('/events', requireAuth, async (req, res) => {
     max_participants, min_participants, budget_type, budget_amount,
     age_min, age_max, late_join_allowed, conditions,
     allowed_gender, max_male, max_female, radius_visibility,
-    duration_min_hours, duration_max_hours, cover_image,
+    duration_min_hours, duration_max_hours, cover_image, club_id,
   } = req.body ?? {}
+
+  let club = null
+  if (club_id) {
+    const { data: clubRow } = await supabase.from('clubs').select('id, title, creator_id').eq('id', club_id).single()
+    if (!clubRow || clubRow.creator_id !== req.auth.sub) {
+      return res.status(403).json({ error: 'Тільки організатор клубу може створити його захід' })
+    }
+    club = clubRow
+  }
 
   const categoryIds = parseCategoryIds(category_ids)
   if (!categoryIds || !title?.trim() || !address_text?.trim() || !start_time || lat == null || lng == null) {
@@ -1369,6 +1565,10 @@ app.post('/events', requireAuth, async (req, res) => {
 
     await syncEventCategories(newId, categoryIds)
 
+    if (club) {
+      await supabase.from('events').update({ club_id: club.id }).eq('id', newId)
+    }
+
     const { data: row, error: refetchErr } = await supabase
       .from('events')
       .select(EVENT_SELECT)
@@ -1378,6 +1578,13 @@ app.post('/events', requireAuth, async (req, res) => {
 
     const shaped = shapeEvent(row, req.auth.sub)
     notifyAboutNewEvent(shaped, req.auth.sub).catch(() => {})
+    if (club) {
+      notifyClubSubscribers(
+        club.id, req.auth.sub,
+        () => `📅 Новий захід клубу «${club.title}»: приєднуйся!`,
+        `event_${newId}`, 'Переглянути захід',
+      ).catch(() => {})
+    }
 
     res.status(201).json({ event: shaped })
   } catch (err) {
