@@ -6,7 +6,9 @@ import { fetchNearbyPlaces } from '../lib/nearbyPlaces.js'
 // (viewing one) — text list instead of map markers, since Nominatim gives
 // name/address/distance directly and a marker-covered map at high zoom
 // turned out both flaky (Overpass) and hard to read in a small embed.
-export default function NearbyPlacesList({ lat, lng }) {
+// Tapping a row calls onSelect so the parent can drop a marker for it on
+// its own map and fly to it.
+export default function NearbyPlacesList({ lat, lng, onSelect, selectedId }) {
   const [places, setPlaces] = useState(null)
   const [error, setError] = useState(null)
 
@@ -36,7 +38,16 @@ export default function NearbyPlacesList({ lat, lng }) {
   return (
     <div style={{ marginTop: 8, maxHeight: 160, overflowY: 'auto' }}>
       {places.slice(0, 12).map(p => (
-        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+        <div
+          key={p.id}
+          onClick={() => onSelect?.(p)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px',
+            borderBottom: '1px solid var(--border)', cursor: onSelect ? 'pointer' : 'default',
+            borderRadius: 'var(--radius-sm)',
+            background: selectedId === p.id ? 'var(--accent-light)' : 'transparent',
+          }}
+        >
           {p.kind === 'fuel' ? <Fuel size={14} color="var(--orange)" /> : <ShoppingCart size={14} color="var(--green)" />}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>

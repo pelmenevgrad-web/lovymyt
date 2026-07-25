@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker } from 'react-leaflet'
 import L from 'leaflet'
@@ -24,16 +24,25 @@ const eventPinIcon = L.divIcon({
   iconSize: [22, 22],
   iconAnchor: [11, 11],
 })
+const poiIcon = (kind) => L.divIcon({
+  className: '',
+  html: `<div style="width:24px;height:24px;border-radius:50%;background:#fff;border:2px solid ${kind === 'fuel' ? '#F97316' : '#22C55E'};display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,.35);">${kind === 'fuel' ? '⛽' : '🛒'}</div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+})
 
 // Shown only when the exact address isn't hidden (radius_visibility).
 // Draggable/zoomable (unlike a locked static preview) so the participant can
 // look around the area, and follows the app's dark/light theme like
 // LocationSearchPicker's map does. Same "nearby fuel/shops" list (via
-// Nominatim, see NearbyPlacesList) as the create-event picker.
+// Nominatim, see NearbyPlacesList) as the create-event picker — tapping a
+// row there drops a marker for it here and flies to it.
 
 function EventMap({ lat, lng }) {
   const [showNearby, setShowNearby] = useState(false)
+  const [selectedPlace, setSelectedPlace] = useState(null)
   const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark')
+  const mapRef = useRef(null)
 
   useEffect(() => {
     const onTheme = () => setIsDark(document.documentElement.getAttribute('data-theme') === 'dark')
@@ -41,9 +50,15 @@ function EventMap({ lat, lng }) {
     return () => WebApp.offEvent('themeChanged', onTheme)
   }, [])
 
+  function handleSelectPlace(place) {
+    setSelectedPlace(place)
+    mapRef.current?.flyTo([place.lat, place.lng], 17)
+  }
+
   return (
     <div style={{ marginBottom: 16 }}>
       <MapContainer
+        ref={mapRef}
         center={[lat, lng]} zoom={14} zoomControl={false}
         style={{ height: 160, width: '100%', borderRadius: 'var(--radius-md)' }}
       >
@@ -53,6 +68,9 @@ function EventMap({ lat, lng }) {
             : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
           attribution=""
         />
+        {selectedPlace && (
+          <Marker position={[selectedPlace.lat, selectedPlace.lng]} icon={poiIcon(selectedPlace.kind)} />
+        )}
         <Marker position={[lat, lng]} icon={eventPinIcon} />
       </MapContainer>
       <button
@@ -63,11 +81,13 @@ function EventMap({ lat, lng }) {
           color: showNearby ? 'var(--accent)' : 'var(--text)',
           border: '1.5px solid ' + (showNearby ? 'var(--accent)' : 'var(--border)'),
         }}
-        onClick={() => setShowNearby(v => !v)}
+        onClick={() => { setShowNearby(v => !v); setSelectedPlace(null) }}
       >
         <Fuel size={14} /> {showNearby ? 'Приховати список' : 'Заправки/магазини поруч'}
       </button>
-      {showNearby && <NearbyPlacesList lat={lat} lng={lng} />}
+      {showNearby && (
+        <NearbyPlacesList lat={lat} lng={lng} onSelect={handleSelectPlace} selectedId={selectedPlace?.id} />
+      )}
     </div>
   )
 }

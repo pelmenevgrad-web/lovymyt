@@ -11,7 +11,14 @@ const pickerIcon = L.divIcon({
   iconAnchor: [11, 11],
 })
 
-function MapPicker({ lat, lng, onMapChange, isDark, mapRef }) {
+const poiIcon = (kind) => L.divIcon({
+  className: '',
+  html: `<div style="width:24px;height:24px;border-radius:50%;background:#fff;border:2px solid ${kind === 'fuel' ? '#F97316' : '#22C55E'};display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,.35);">${kind === 'fuel' ? '⛽' : '🛒'}</div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+})
+
+function MapPicker({ lat, lng, onMapChange, isDark, mapRef, selectedPlace }) {
   function ClickCapture() {
     useMapEvents({ click: (e) => onMapChange(e.latlng.lat, e.latlng.lng) })
     return null
@@ -32,6 +39,9 @@ function MapPicker({ lat, lng, onMapChange, isDark, mapRef }) {
         attribution=""
       />
       <ClickCapture />
+      {selectedPlace && (
+        <Marker position={[selectedPlace.lat, selectedPlace.lng]} icon={poiIcon(selectedPlace.kind)} />
+      )}
       <Marker
         position={[lat, lng]}
         icon={pickerIcon}
@@ -71,7 +81,13 @@ export default function LocationSearchPicker({
   const [searching, setSearching] = useState(false)
   const [focused, setFocused] = useState(false)
   const [showNearby, setShowNearby] = useState(false)
+  const [selectedPlace, setSelectedPlace] = useState(null)
   const mapRef = useRef(null)
+
+  function handleSelectPlace(place) {
+    setSelectedPlace(place)
+    mapRef.current?.flyTo([place.lat, place.lng], 17)
+  }
 
   useEffect(() => {
     const query = (addressText || '').trim()
@@ -157,7 +173,7 @@ export default function LocationSearchPicker({
       </div>
 
       <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>{hint}</div>
-      <MapPicker lat={lat} lng={lng} isDark={isDark} mapRef={mapRef} onMapChange={handleMapChange} />
+      <MapPicker lat={lat} lng={lng} isDark={isDark} mapRef={mapRef} onMapChange={handleMapChange} selectedPlace={selectedPlace} />
       <button
         type="button"
         className="chip"
@@ -167,11 +183,13 @@ export default function LocationSearchPicker({
           color: showNearby ? 'var(--accent)' : 'var(--text)',
           border: '1.5px solid ' + (showNearby ? 'var(--accent)' : 'var(--border)'),
         }}
-        onClick={() => setShowNearby(v => !v)}
+        onClick={() => { setShowNearby(v => !v); setSelectedPlace(null) }}
       >
         <Fuel size={14} /> {showNearby ? 'Приховати список' : 'Заправки/магазини поруч'}
       </button>
-      {showNearby && <NearbyPlacesList lat={lat} lng={lng} />}
+      {showNearby && (
+        <NearbyPlacesList lat={lat} lng={lng} onSelect={handleSelectPlace} selectedId={selectedPlace?.id} />
+      )}
     </div>
   )
 }
