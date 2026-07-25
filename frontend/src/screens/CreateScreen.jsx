@@ -1,12 +1,34 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import WebApp from '@twa-dev/sdk'
-import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Save, Zap, Plus, X, Loader2, Camera, Image as ImageIcon, Lock } from 'lucide-react'
+import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Save, Zap, Plus, X, Loader2, Camera, Image as ImageIcon, Lock, MapPin } from 'lucide-react'
 import { useCategories } from '../context/CategoriesContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import { compressImage } from '../lib/image.js'
 import BackButton from '../components/BackButton.jsx'
 import LocationSearchPicker from '../components/LocationSearchPicker.jsx'
+
+// Dismissible ad card shown above the location picker when an active venue
+// is within its own radius of the point the organizer just picked.
+function VenueAdCard({ venue, onOpen, onDismiss }) {
+  return (
+    <div className="card" style={{ padding: 10, marginBottom: 8, display: 'flex', gap: 10, alignItems: 'center' }}>
+      <img src={venue.photo_url} alt="" style={{ width: 44, height: 44, borderRadius: 'var(--radius-sm)', objectFit: 'cover', flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => onOpen(venue.id)}>
+        <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <MapPin size={11} /> Реклама • {venue.distance_km} км
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{venue.title}</div>
+      </div>
+      <button
+        onClick={(e) => { e.stopPropagation(); onDismiss(venue.id) }}
+        style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', flexShrink: 0 }}
+      >
+        <X size={16} />
+      </button>
+    </div>
+  )
+}
 
 // Kyiv center — initial position for the location picker below
 const INITIAL_LAT = 50.4501
@@ -45,9 +67,12 @@ export default function CreateScreen() {
   const navigate = useNavigate()
   const { categories } = useCategories()
   const { id: eventId } = useParams()
+  const [searchParams] = useSearchParams()
   const isEdit = !!eventId
   const [loadingEvent, setLoadingEvent] = useState(isEdit)
   const [loadError, setLoadError] = useState(null)
+  const [nearbyVenues, setNearbyVenues] = useState([])
+  const [dismissedVenueIds, setDismissedVenueIds] = useState([])
   const [form, setForm] = useState({
     category_ids: [],
     title: '',
@@ -132,6 +157,29 @@ export default function CreateScreen() {
       .catch(err => setLoadError(err.message))
       .finally(() => setLoadingEvent(false))
   }, [isEdit, eventId])
+
+  // Coming from a venue ad's "Створити захід тут" button — pre-fill address
+  // and use the venue's photo as the event's cover.
+  useEffect(() => {
+    if (isEdit) return
+    const venueId = searchParams.get('venue_id')
+    if (!venueId) return
+    apiFetch(`/venues/${venueId}`)
+      .then(({ venue }) => setForm(f => ({
+        ...f, address_text: venue.address_text, lat: venue.lat, lng: venue.lng, cover_image: venue.photo_url,
+      })))
+      .catch(err => console.error('[Create] failed to prefill from venue:', err.message))
+  }, [isEdit, searchParams])
+
+  // Debounced nearby-venue-ad lookup whenever the picked location changes.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      apiFetch(`/venues/nearby?lat=${form.lat}&lng=${form.lng}`)
+        .then(({ venues }) => setNearbyVenues(venues))
+        .catch(() => {})
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [form.lat, form.lng])
 
   const set = (key, value) => setForm(f => ({ ...f, [key]: value }))
   const toggleCond = (key) => setForm(f => ({
@@ -335,6 +383,13 @@ export default function CreateScreen() {
 
       {/* Location */}
       <Section title="Місце">
+        {nearbyVenues.filter(v => !dismissedVenueIds.includes(v.id)).map(v => (
+          <VenueAdCard
+            key={v.id} venue={v}
+            onOpen={(id) => navigate(`/venues/${id}`)}
+            onDismiss={(id) => setDismissedVenueIds(ids => [...ids, id])}
+          />
+        ))}
         <LocationSearchPicker
           addressText={form.address_text}
           lat={form.lat}

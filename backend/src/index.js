@@ -55,6 +55,16 @@ const PRO_DURATION_DAYS = 30
 const STARS_TOPUP_PACKAGES = [100, 300, 750]
 const FREE_ACTIVE_EVENTS_LIMIT = 2
 
+// Venue-ad tiers (radius = how far a venue shows up from the point an
+// organizer picks while creating an event; premium always sorts first
+// among competing ads in a matching area regardless of distance).
+const VENUE_TIERS = {
+  basic:    { price: 250, days: 14, radius_km: 10 },
+  standard: { price: 450, days: 30, radius_km: 20 },
+  premium:  { price: 800, days: 30, radius_km: 30 },
+}
+const VENUE_TIER_RANK = { premium: 0, standard: 1, basic: 2 }
+
 function isProActive(user) {
   return !!user.is_pro && (!user.pro_expires_at || new Date(user.pro_expires_at) > new Date())
 }
@@ -114,6 +124,33 @@ bot.on('message', async (ctx, next) => {
       telegram_payment_charge_id: payment.telegram_payment_charge_id,
     })
     ctx.reply(`✅ PRO активовано до ${newExpiry.toLocaleDateString('uk-UA')}`).catch(() => {})
+  } else if (payload.type === 'venue_activation') {
+    const { data: venue } = await supabase
+      .from('venues').select('id, title, status, active_until').eq('id', payload.venue_id).single()
+    const tierCfg = VENUE_TIERS[payload.tier]
+    if (!venue || venue.status !== 'approved' || !tierCfg) {
+      console.error('venue_activation payment for a non-approved/missing venue or tier:', payload.venue_id, payload.tier)
+      return
+    }
+
+    // Stack remaining time (never lose paid days), apply the new tier's
+    // radius/rank immediately even if it's an upgrade over a still-active
+    // lower tier.
+    const stillActive = venue.active_until && new Date(venue.active_until) > new Date()
+    const base = stillActive ? new Date(venue.active_until) : new Date()
+    const newExpiry = new Date(base.getTime() + tierCfg.days * 86_400_000)
+
+    const { error } = await supabase
+      .from('venues')
+      .update({ tier: payload.tier, radius_km: tierCfg.radius_km, active_until: newExpiry.toISOString() })
+      .eq('id', venue.id)
+    if (error) return console.error('Activating venue failed:', error.message)
+
+    await supabase.from('stars_transactions').insert({
+      user_id: user.id, type: 'venue_activation', amount: tierCfg.price,
+      telegram_payment_charge_id: payment.telegram_payment_charge_id,
+    })
+    ctx.reply(`✅ Рекламу локації «${venue.title}» активовано до ${newExpiry.toLocaleDateString('uk-UA')}`).catch(() => {})
   }
 })
 
@@ -505,6 +542,330 @@ app.post('/pro/subscribe', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Creating PRO invoice failed:', err.message)
     res.status(500).json({ error: 'Failed to create invoice' })
+  }
+})
+
+// ── Venues (Реклама локацій) ─────────────────────────────────────────────
+// A venue owner (e.g. gazebos by a lake) advertises their spot; admin
+// moderates for free, then the owner pays real Stars to activate a tier
+// (duration + visibility radius). Organizers see active ads near wherever
+// they pick a location while creating an event (GET /venues/nearby).
+
+app.post('/venues', requireAuth, async (req, res) => {
+  const { title, description, address_text, lat, lng, photo, price_info } = req.body ?? {}
+  if (!title?.trim() || !address_text?.trim() || lat == null || lng == null) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+  if (!photo) {
+    return res.status(400).json({ error: 'Потрібне фото локації' })
+  }
+
+  try {
+    const photo_url = await uploadImageDataUrl(photo, 'chat-images', `venues/${req.auth.sub}`)
+    const { data, error } = await supabase
+      .from('venues')
+      .insert({
+        owner_id: req.auth.sub, title: title.trim(), description: description?.trim() || null,
+        address_text: address_text.trim(), lat, lng, photo_url, price_info: price_info?.trim() || null,
+      })
+      .select()
+      .single()
+    if (error) throw error
+    res.status(201).json({ venue: data })
+  } catch (err) {
+    if (err instanceof ImageUploadError) {
+      return res.status(400).json({ error: err.message })
+    }
+    console.error('Creating venue failed:', err.message)
+    res.status(500).json({ error: 'Failed to create venue' })
+  }
+})
+
+app.get('/venues/mine', requireAuth, async (req, res) => {
+  const { data, error } = await supabase
+    .from('venues')
+    .select('*')
+    .eq('owner_id', req.auth.sub)
+    .order('created_at', { ascending: false })
+  if (error) {
+    console.error('Fetching my venues failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load venues' })
+  }
+  res.json({ venues: data })
+})
+
+// Fetch-all-then-filter-in-JS, same approach as notifyAboutNewEvent's
+// radius matching above — no PostGIS query used anywhere in this app.
+// Registered before GET /venues/:id so "nearby" isn't swallowed as an :id.
+app.get('/venues/nearby', requireAuth, async (req, res) => {
+  const lat = Number(req.query.lat)
+  const lng = Number(req.query.lng)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ error: 'lat/lng required' })
+  }
+
+  const { data: candidates, error } = await supabase
+    .from('venues')
+    .select('id, title, photo_url, price_info, tier, radius_km, lat, lng, owner_id')
+    .eq('status', 'approved')
+    .gt('active_until', new Date().toISOString())
+
+  if (error) {
+    console.error('Fetching nearby venues failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load venues' })
+  }
+
+  const matches = (candidates ?? [])
+    .filter(v => v.owner_id !== req.auth.sub)
+    .map(v => ({ ...v, distance_km: Math.round(haversineKm(lat, lng, v.lat, v.lng) * 10) / 10 }))
+    .filter(v => v.distance_km <= v.radius_km)
+    .sort((a, b) => VENUE_TIER_RANK[a.tier] - VENUE_TIER_RANK[b.tier] || a.distance_km - b.distance_km)
+    .slice(0, 3)
+    .map(({ lat, lng, radius_km, owner_id, ...rest }) => rest)
+
+  res.json({ venues: matches })
+})
+
+app.patch('/venues/:id', requireAuth, async (req, res) => {
+  const { data: existing, error: fetchErr } = await supabase
+    .from('venues').select('owner_id, status').eq('id', req.params.id).single()
+  if (fetchErr) {
+    return res.status(404).json({ error: 'Venue not found' })
+  }
+  if (existing.owner_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки власник може редагувати локацію' })
+  }
+  if (existing.status === 'approved') {
+    return res.status(400).json({ error: 'Локацію вже підтверджено — редагування недоступне' })
+  }
+
+  const { title, description, address_text, lat, lng, photo, price_info } = req.body ?? {}
+  if (!title?.trim() || !address_text?.trim() || lat == null || lng == null) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+
+  try {
+    const patch = {
+      title: title.trim(), description: description?.trim() || null,
+      address_text: address_text.trim(), lat, lng, price_info: price_info?.trim() || null,
+    }
+    if (photo) {
+      patch.photo_url = await uploadImageDataUrl(photo, 'chat-images', `venues/${req.auth.sub}`)
+    }
+    // Editing after a rejection re-enters the moderation queue.
+    if (existing.status === 'rejected') {
+      patch.status = 'pending'
+      patch.reject_reason = null
+      patch.reviewed_by = null
+      patch.reviewed_at = null
+    }
+
+    const { data, error } = await supabase.from('venues').update(patch).eq('id', req.params.id).select().single()
+    if (error) throw error
+    res.json({ venue: data })
+  } catch (err) {
+    if (err instanceof ImageUploadError) {
+      return res.status(400).json({ error: err.message })
+    }
+    console.error('Updating venue failed:', err.message)
+    res.status(500).json({ error: 'Failed to update venue' })
+  }
+})
+
+app.post('/venues/:id/activate', requireAuth, async (req, res) => {
+  const { tier } = req.body ?? {}
+  const tierCfg = VENUE_TIERS[tier]
+  if (!tierCfg) {
+    return res.status(400).json({ error: 'Невідомий тариф' })
+  }
+
+  const { data: venue, error: fetchErr } = await supabase
+    .from('venues').select('owner_id, status, title').eq('id', req.params.id).single()
+  if (fetchErr) {
+    return res.status(404).json({ error: 'Venue not found' })
+  }
+  if (venue.owner_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки власник може активувати локацію' })
+  }
+  if (venue.status !== 'approved') {
+    return res.status(400).json({ error: 'Локацію ще не підтверджено адміністратором' })
+  }
+
+  try {
+    const invoiceLink = await bot.telegram.createInvoiceLink({
+      title: `Реклама «${venue.title}»`,
+      description: `Показ локації протягом ${tierCfg.days} днів у радіусі ${tierCfg.radius_km} км`,
+      payload: JSON.stringify({ type: 'venue_activation', venue_id: req.params.id, tier }),
+      provider_token: '',
+      currency: 'XTR',
+      prices: [{ label: `Реклама локації — ${tier}`, amount: tierCfg.price }],
+    })
+    res.json({ invoice_link: invoiceLink })
+  } catch (err) {
+    console.error('Creating venue-activation invoice failed:', err.message)
+    res.status(500).json({ error: 'Failed to create invoice' })
+  }
+})
+
+// Public detail page — anyone can view an approved venue; only the owner
+// (or an admin) can see one that's still pending/rejected.
+app.get('/venues/:id', async (req, res) => {
+  const { data, error } = await supabase.from('venues').select('*').eq('id', req.params.id).single()
+  if (error) {
+    return res.status(404).json({ error: 'Venue not found' })
+  }
+
+  const auth = tryAuth(req)
+  if (data.status !== 'approved') {
+    let isAdmin = false
+    if (auth) {
+      const { data: viewer } = await supabase.from('users').select('is_admin').eq('id', auth.sub).single()
+      isAdmin = !!viewer?.is_admin
+    }
+    if (!auth || (auth.sub !== data.owner_id && !isAdmin)) {
+      return res.status(404).json({ error: 'Venue not found' })
+    }
+  }
+
+  res.json({ venue: { ...data, is_owner: auth?.sub === data.owner_id } })
+})
+
+// Organizer taps "Зв'язатися" — get-or-create so repeated taps don't
+// re-notify the owner or duplicate the opening system message.
+app.post('/venues/:id/inquiries', requireAuth, async (req, res) => {
+  const { data: venue, error: venueErr } = await supabase
+    .from('venues').select('id, owner_id, title').eq('id', req.params.id).single()
+  if (venueErr) {
+    return res.status(404).json({ error: 'Venue not found' })
+  }
+  if (venue.owner_id === req.auth.sub) {
+    return res.status(400).json({ error: 'Не можна писати собі' })
+  }
+
+  const { data: existing } = await supabase
+    .from('venue_inquiries')
+    .select('id')
+    .eq('venue_id', req.params.id)
+    .eq('organizer_id', req.auth.sub)
+    .maybeSingle()
+  if (existing) {
+    return res.json({ inquiry_id: existing.id })
+  }
+
+  const { data: inquiry, error } = await supabase
+    .from('venue_inquiries')
+    .insert({ venue_id: req.params.id, organizer_id: req.auth.sub })
+    .select('id')
+    .single()
+  if (error) {
+    console.error('Creating venue inquiry failed:', error.message)
+    return res.status(500).json({ error: 'Failed to start chat' })
+  }
+
+  await supabase.from('venue_messages').insert({
+    inquiry_id: inquiry.id, sender_id: null, is_system: true,
+    text: 'Організатор хоче провести захід у цій локації. Обговоріть деталі, вільні дати та ціну.',
+  })
+
+  const [{ data: organizer }, { data: owner }] = await Promise.all([
+    supabase.from('users').select('first_name').eq('id', req.auth.sub).single(),
+    supabase.from('users').select('telegram_id').eq('id', venue.owner_id).single(),
+  ])
+  notifyUser(
+    owner?.telegram_id,
+    `🏕 ${organizer?.first_name ?? 'Організатор'} хоче провести захід у твоїй локації «${venue.title}». Зв'яжіться для деталей.`,
+    `venue_chat_${inquiry.id}`, 'Відкрити чат',
+  ).catch(() => {})
+
+  res.status(201).json({ inquiry_id: inquiry.id })
+})
+
+// Owner's inbox for one venue — aggregated server-side (an owner could have
+// many more inquiries than a typical user has event chats).
+app.get('/venues/:id/inquiries', requireAuth, async (req, res) => {
+  const { data: venue, error: venueErr } = await supabase
+    .from('venues').select('owner_id').eq('id', req.params.id).single()
+  if (venueErr) {
+    return res.status(404).json({ error: 'Venue not found' })
+  }
+  if (venue.owner_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки власник може переглядати звернення' })
+  }
+
+  const { data, error } = await supabase
+    .from('venue_inquiries')
+    .select('id, created_at, organizer:users(id, first_name, avatar_url)')
+    .eq('venue_id', req.params.id)
+    .order('created_at', { ascending: false })
+  if (error) {
+    console.error('Fetching venue inquiries failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load inquiries' })
+  }
+  res.json({ inquiries: data })
+})
+
+async function canAccessVenueChat(inquiryId, userId) {
+  const { data: inquiry } = await supabase
+    .from('venue_inquiries')
+    .select('organizer_id, venue:venues(owner_id)')
+    .eq('id', inquiryId)
+    .single()
+  return !!inquiry && (inquiry.organizer_id === userId || inquiry.venue?.owner_id === userId)
+}
+
+const VENUE_MESSAGE_SELECT = 'id, text, image_url, is_system, created_at, sender:users(id, first_name, avatar_url)'
+
+app.get('/venues/inquiries/:inquiryId/messages', requireAuth, async (req, res) => {
+  const allowed = await canAccessVenueChat(req.params.inquiryId, req.auth.sub)
+  if (!allowed) {
+    return res.status(403).json({ error: 'Доступно тільки учасникам розмови' })
+  }
+
+  const { data, error } = await supabase
+    .from('venue_messages')
+    .select(VENUE_MESSAGE_SELECT)
+    .eq('inquiry_id', req.params.inquiryId)
+    .order('created_at', { ascending: true })
+    .limit(200)
+  if (error) {
+    console.error('Fetching venue messages failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load chat' })
+  }
+  res.json({ messages: data })
+})
+
+app.post('/venues/inquiries/:inquiryId/messages', requireAuth, async (req, res) => {
+  const allowed = await canAccessVenueChat(req.params.inquiryId, req.auth.sub)
+  if (!allowed) {
+    return res.status(403).json({ error: 'Доступно тільки учасникам розмови' })
+  }
+
+  const text = req.body?.text?.trim() || null
+  const imageDataUrl = req.body?.image
+  if (!text && !imageDataUrl) {
+    return res.status(400).json({ error: 'Порожнє повідомлення' })
+  }
+
+  try {
+    const imageUrl = imageDataUrl
+      ? await uploadImageDataUrl(imageDataUrl, 'chat-images', `venue-inquiries/${req.params.inquiryId}/${req.auth.sub}`)
+      : null
+
+    const { data, error } = await supabase
+      .from('venue_messages')
+      .insert({ inquiry_id: req.params.inquiryId, sender_id: req.auth.sub, text, image_url: imageUrl })
+      .select(VENUE_MESSAGE_SELECT)
+      .single()
+    if (error) throw error
+
+    io.to(`venue_inquiry:${req.params.inquiryId}`).emit('new_message', data)
+    res.status(201).json({ message: data })
+  } catch (err) {
+    if (err instanceof ImageUploadError) {
+      return res.status(400).json({ error: err.message })
+    }
+    console.error('Sending venue message failed:', err.message)
+    res.status(500).json({ error: 'Failed to send message' })
   }
 })
 
@@ -2166,7 +2527,7 @@ app.get('/admin/stats', requireAdmin, async (_req, res) => {
   const [
     total_users, banned_users, total_events, planned_events, gathering_events,
     active_events, completed_events, cancelled_events, total_reports, total_reviews,
-    pending_user_reports, pending_verification_requests,
+    pending_user_reports, pending_verification_requests, pending_venues,
   ] = await Promise.all([
     count('users'),
     count('users', (q) => q.eq('is_banned', true)),
@@ -2180,12 +2541,13 @@ app.get('/admin/stats', requireAdmin, async (_req, res) => {
     count('reviews'),
     count('reports', (q) => q.eq('status', 'pending')),
     count('verification_requests', (q) => q.eq('status', 'pending')),
+    count('venues', (q) => q.eq('status', 'pending')),
   ])
 
   res.json({
     total_users, banned_users, total_events,
     events_by_status: { planned: planned_events, gathering: gathering_events, active: active_events, completed: completed_events, cancelled: cancelled_events },
-    total_reports, total_reviews, pending_user_reports, pending_verification_requests,
+    total_reports, total_reviews, pending_user_reports, pending_verification_requests, pending_venues,
   })
 })
 
@@ -2422,8 +2784,93 @@ app.post('/admin/verification-requests/:id/reject', requireAdmin, async (req, re
   res.json({ request: data })
 })
 
+app.get('/admin/venues', requireAdmin, async (req, res) => {
+  let query = supabase
+    .from('venues')
+    .select('*, owner:users!venues_owner_id_fkey(id, first_name, avatar_url, telegram_id)')
+    .order('created_at', { ascending: false })
+
+  if (req.query.status) query = query.eq('status', req.query.status)
+
+  const { data, error } = await query
+  if (error) {
+    console.error('Fetching venues failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load venues' })
+  }
+  res.json({ venues: data })
+})
+
+app.post('/admin/venues/:id/approve', requireAdmin, async (req, res) => {
+  const { data: venue, error: fetchErr } = await supabase
+    .from('venues').select('owner_id, status, title').eq('id', req.params.id).single()
+  if (fetchErr || !venue) {
+    return res.status(404).json({ error: 'Venue not found' })
+  }
+  if (venue.status !== 'pending') {
+    return res.status(400).json({ error: 'Локацію вже розглянуто' })
+  }
+
+  const { data, error } = await supabase
+    .from('venues')
+    .update({ status: 'approved', reviewed_by: req.auth.sub, reviewed_at: new Date().toISOString() })
+    .eq('id', req.params.id)
+    .select()
+    .single()
+  if (error) {
+    console.error('Approving venue failed:', error.message)
+    return res.status(500).json({ error: 'Failed to approve venue' })
+  }
+
+  const { data: owner } = await supabase.from('users').select('telegram_id').eq('id', venue.owner_id).single()
+  notifyUser(
+    owner?.telegram_id,
+    `✅ Локацію «${venue.title}» підтверджено — онови показ, обравши тариф.`,
+    `venue_${req.params.id}`, 'Відкрити локацію',
+  ).catch(() => {})
+
+  res.json({ venue: data })
+})
+
+app.post('/admin/venues/:id/reject', requireAdmin, async (req, res) => {
+  const reason = req.body?.reason?.trim()
+  if (!reason) {
+    return res.status(400).json({ error: 'Опиши причину відхилення' })
+  }
+
+  const { data: venue, error: fetchErr } = await supabase
+    .from('venues').select('owner_id, status, title').eq('id', req.params.id).single()
+  if (fetchErr || !venue) {
+    return res.status(404).json({ error: 'Venue not found' })
+  }
+  if (venue.status !== 'pending') {
+    return res.status(400).json({ error: 'Локацію вже розглянуто' })
+  }
+
+  const { data, error } = await supabase
+    .from('venues')
+    .update({ status: 'rejected', reject_reason: reason, reviewed_by: req.auth.sub, reviewed_at: new Date().toISOString() })
+    .eq('id', req.params.id)
+    .select()
+    .single()
+  if (error) {
+    console.error('Rejecting venue failed:', error.message)
+    return res.status(500).json({ error: 'Failed to reject venue' })
+  }
+
+  const { data: owner } = await supabase.from('users').select('telegram_id').eq('id', venue.owner_id).single()
+  notifyUser(
+    owner?.telegram_id,
+    `❌ Локацію «${venue.title}» відхилено.\nПричина: ${reason}`,
+    `venue_${req.params.id}`, 'Відкрити локацію',
+  ).catch(() => {})
+
+  res.json({ venue: data })
+})
+
 // Only topup/pro_purchase carry a real Telegram charge id — gift_sent/
 // gift_received are internal wallet transfers with nothing to refund.
+// venue_activation deliberately excluded too: moderation-before-payment
+// means there's never a rejected charge to refund.
 app.get('/admin/stars-transactions', requireAdmin, async (req, res) => {
   let query = supabase
     .from('stars_transactions')
@@ -2565,6 +3012,16 @@ io.on('connection', (socket) => {
 
   socket.on('leave_event', (eventId) => {
     socket.leave(`event:${eventId}`)
+  })
+
+  socket.on('join_venue_chat', async (inquiryId) => {
+    if (await canAccessVenueChat(inquiryId, socket.userId)) {
+      socket.join(`venue_inquiry:${inquiryId}`)
+    }
+  })
+
+  socket.on('leave_venue_chat', (inquiryId) => {
+    socket.leave(`venue_inquiry:${inquiryId}`)
   })
 })
 

@@ -25,6 +25,12 @@ import AdminReportsScreen from './screens/AdminReportsScreen.jsx'
 import AdminVerificationScreen from './screens/AdminVerificationScreen.jsx'
 import AdminStarsScreen from './screens/AdminStarsScreen.jsx'
 import AdminUsersScreen from './screens/AdminUsersScreen.jsx'
+import AdminVenuesScreen from './screens/AdminVenuesScreen.jsx'
+import MyVenuesScreen from './screens/MyVenuesScreen.jsx'
+import CreateVenueScreen from './screens/CreateVenueScreen.jsx'
+import VenueDetailScreen from './screens/VenueDetailScreen.jsx'
+import VenueChatScreen from './screens/VenueChatScreen.jsx'
+import VenueInquiriesScreen from './screens/VenueInquiriesScreen.jsx'
 import WelcomeScreen from './screens/WelcomeScreen.jsx'
 import { useAuth } from './context/AuthContext.jsx'
 
@@ -194,12 +200,16 @@ export default function App() {
   }
 
   // Invite/notification links open as https://t.me/lovymyt_bot?startapp=event_<uuid>,
-  // chat_<uuid>, review_<uuid> or user_<uuid> — land straight on that
-  // event/chat/review/profile instead of the map.
+  // chat_<uuid>, review_<uuid>, user_<uuid>, venue_<uuid> or venue_chat_<uuid> —
+  // land straight on that event/chat/review/profile/venue instead of the map.
+  // venue_chat_ must be checked before venue_ since "venue_chat_X" also
+  // startsWith('venue_').
   const startParam = WebApp.initDataUnsafe?.start_param
   const initialPath = startParam?.startsWith('chat_') ? `/events/${startParam.slice('chat_'.length)}/chat`
     : startParam?.startsWith('review_') ? `/events/${startParam.slice('review_'.length)}/review`
     : startParam?.startsWith('event_') ? `/events/${startParam.slice('event_'.length)}`
+    : startParam?.startsWith('venue_chat_') ? `/venues/inquiries/${startParam.slice('venue_chat_'.length)}`
+    : startParam?.startsWith('venue_') ? `/venues/${startParam.slice('venue_'.length)}`
     : startParam?.startsWith('user_') ? `/users/${startParam.slice('user_'.length)}`
     : startParam === 'profile' ? '/profile'
     : '/'
@@ -230,6 +240,13 @@ export default function App() {
         <Route path="/admin/verification" element={<AdminOnly><AdminVerificationScreen /></AdminOnly>} />
         <Route path="/admin/stars" element={<AdminOnly><AdminStarsScreen /></AdminOnly>} />
         <Route path="/admin/users" element={<AdminOnly><AdminUsersScreen /></AdminOnly>} />
+        <Route path="/admin/venues" element={<AdminOnly><AdminVenuesScreen /></AdminOnly>} />
+        <Route path="/venues/mine" element={<MyVenuesScreen />} />
+        <Route path="/venues/new" element={<CreateVenueScreen />} />
+        <Route path="/venues/:id/edit" element={<CreateVenueScreen />} />
+        <Route path="/venues/:id/inquiries" element={<VenueInquiriesScreen />} />
+        <Route path="/venues/inquiries/:inquiryId" element={<VenueChatScreen />} />
+        <Route path="/venues/:id" element={<VenueDetailScreen />} />
       </Routes>
       <BottomNav />
     </MemoryRouter>
