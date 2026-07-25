@@ -5,7 +5,7 @@ import L from 'leaflet'
 import WebApp from '@twa-dev/sdk'
 import { LocateFixed, Loader2, Search, SlidersHorizontal, X } from 'lucide-react'
 import CategoryChips from '../components/CategoryChips.jsx'
-import EventCard from '../components/EventCard.jsx'
+import EventCard, { Avatar } from '../components/EventCard.jsx'
 import { apiFetch } from '../lib/api.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
 import { MARKER_ICON_PATHS } from '../lib/markerIcons.js'
@@ -230,6 +230,7 @@ export default function MapScreen() {
   const [showFilters, setShowFilters] = useState(false)
   const [budgetFilter, setBudgetFilter] = useState(null)
   const [noAgeLimitOnly, setNoAgeLimitOnly] = useState(false)
+  const [liveBattle, setLiveBattle] = useState(null)
 
   useEffect(() => {
     const onTheme = () =>
@@ -243,6 +244,15 @@ export default function MapScreen() {
       .then(({ events }) => setEvents(events))
       .catch(err => console.error('[Map] failed to load events:', err.message))
       .finally(() => setEventsLoaded(true))
+  }, [])
+
+  // Just the single most recent live battle — enough for a discovery badge
+  // without building a whole "pick which battle" picker for what's expected
+  // to be a rare simultaneous-battles case.
+  useEffect(() => {
+    apiFetch('/battles')
+      .then(({ battles }) => setLiveBattle(battles.find(b => b.status === 'active') ?? null))
+      .catch(err => console.error('[Map] failed to load battles:', err.message))
   }, [])
 
   const filtered = events
@@ -276,6 +286,26 @@ export default function MapScreen() {
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 10,
       }}>
         <div style={{ display: 'flex', gap: 8, padding: '0 16px', marginBottom: 10 }}>
+          {liveBattle && !showSearch && (
+            <button
+              onClick={() => navigate(`/battles/${liveBattle.id}`)}
+              style={{
+                flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6,
+                background: 'var(--card)', border: 'none', borderRadius: 999, padding: '0 12px 0 8px', height: 40,
+                boxShadow: 'var(--shadow-md)', color: 'var(--text)', cursor: 'pointer',
+              }}
+            >
+              <span style={{ display: 'flex' }}>
+                <span style={{ position: 'relative', zIndex: 1 }}>
+                  <Avatar name={liveBattle.challenger.organizer_name ?? '?'} url={liveBattle.challenger.organizer_avatar} size={24} />
+                </span>
+                <span style={{ marginLeft: -8 }}>
+                  <Avatar name={liveBattle.opponent.organizer_name ?? '?'} url={liveBattle.opponent.organizer_avatar} size={24} />
+                </span>
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 800 }}>⚔️ Баттл</span>
+            </button>
+          )}
           {showSearch ? (
             <div style={{
               flex: 1, display: 'flex', alignItems: 'center', gap: 6,
