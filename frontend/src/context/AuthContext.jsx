@@ -29,9 +29,16 @@ export function AuthProvider({ children }) {
       }
 
       try {
+        // Referral attribution: only matters on a brand-new account (the
+        // backend only attaches it the first time a telegram_id is seen),
+        // but harmless to send every time — start_param is set for as long
+        // as the app was opened from that particular deep link.
+        const startParam = WebApp.initDataUnsafe?.start_param
+        const ref = startParam?.startsWith('ref_') ? startParam.slice('ref_'.length) : undefined
+
         const { token, user } = await apiFetch('/auth/telegram', {
           method: 'POST',
-          body: JSON.stringify({ initData }),
+          body: JSON.stringify({ initData, ref }),
         })
         localStorage.setItem('lovymyt_token', token)
         setUser(user)

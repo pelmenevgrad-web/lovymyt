@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History, ShieldEllipsis, MapPin, Repeat } from 'lucide-react'
+import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History, ShieldEllipsis, MapPin, Repeat, Gift, Copy, Check } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/EventCard.jsx'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
@@ -11,6 +11,8 @@ import GiftsReceived from '../components/GiftsReceived.jsx'
 import TopupSheet from '../components/TopupSheet.jsx'
 import VerificationSheet from '../components/VerificationSheet.jsx'
 import { PRO_PRICE_STARS, payInvoice } from '../lib/payments.js'
+
+const REFERRAL_REWARD_STARS = 15
 
 function shareApp() {
   shareViaTelegram(
@@ -74,6 +76,8 @@ export default function ProfileScreen() {
   const [proError, setProError] = useState(null)
   const [showVerification, setShowVerification] = useState(false)
   const [verificationRequest, setVerificationRequest] = useState(null)
+  const [referralStats, setReferralStats] = useState(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (status !== 'ok') return
@@ -83,7 +87,24 @@ export default function ProfileScreen() {
     apiFetch('/users/me/verification')
       .then(({ request }) => setVerificationRequest(request))
       .catch(err => console.error('[Profile] failed to load verification status:', err.message))
+    apiFetch('/referrals/stats')
+      .then(setReferralStats)
+      .catch(err => console.error('[Profile] failed to load referral stats:', err.message))
   }, [status])
+
+  function copyReferralLink() {
+    navigator.clipboard.writeText(appLink(`ref_${user.id}`)).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  function shareReferralLink() {
+    shareViaTelegram(
+      appLink(`ref_${user.id}`),
+      `Приєднуйся до ЛовиМить! За реєстрацію по цьому запрошенню ми обидва отримаємо по ${REFERRAL_REWARD_STARS}⭐`,
+    )
+  }
 
   async function refreshMe() {
     const { user: fresh } = await apiFetch('/users/me')
@@ -246,6 +267,37 @@ export default function ProfileScreen() {
         >
           <Repeat size={16} /> Мої клуби
         </button>
+      </div>
+
+      <div className="card" style={{ margin: '12px 16px 0', padding: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Gift size={16} color="var(--accent)" />
+          <span style={{ fontWeight: 700, fontSize: 14 }}>Запроси друга</span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 10 }}>
+          Друг реєструється за твоїм лінком — і ви обидва отримуєте по {REFERRAL_REWARD_STARS}⭐, щойно він приєднається до заходу або створить свій.
+        </div>
+        {referralStats && (
+          <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
+            Запрошено: {referralStats.referred_count} · Зароблено: {referralStats.stars_earned}⭐
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="btn btn-ghost"
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13 }}
+            onClick={copyReferralLink}
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Скопійовано' : 'Копіювати лінк'}
+          </button>
+          <button
+            className="btn btn-primary"
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13 }}
+            onClick={shareReferralLink}
+          >
+            <Share2 size={14} /> Поділитися
+          </button>
+        </div>
       </div>
 
       {user.is_admin && (

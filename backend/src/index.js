@@ -54,6 +54,7 @@ const PRO_PRICE_STARS = 300
 const PRO_DURATION_DAYS = 30
 const STARS_TOPUP_PACKAGES = [100, 300, 750]
 const FREE_ACTIVE_EVENTS_LIMIT = 2
+const REFERRAL_REWARD_STARS = 15
 
 // Venue-ad tiers (radius = how far a venue shows up from the point an
 // organizer picks while creating an event; premium always sorts first
@@ -341,13 +342,21 @@ async function computeUserStats(userId) {
 }
 
 // Telegram Mini App auth: verify initData signature, upsert the user, issue a JWT
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 app.post('/auth/telegram', async (req, res) => {
-  const { initData } = req.body ?? {}
+  const { initData, ref } = req.body ?? {}
   const tgUser = verifyTelegramInitData(initData, BOT_TOKEN)
 
   if (!tgUser) {
     return res.status(401).json({ error: 'Invalid or expired Telegram initData' })
   }
+
+  // Referral attribution only applies to a brand-new account, and only once
+  // — checked before the upsert since upsert().select() doesn't say whether
+  // it inserted or updated a row.
+  const { data: existingUser } = await supabase.from('users').select('id').eq('telegram_id', tgUser.id).maybeSingle()
+  const isNewUser = !existingUser
 
   const { data: user, error } = await supabase
     .from('users')
@@ -369,6 +378,14 @@ app.post('/auth/telegram', async (req, res) => {
     return res.status(500).json({ error: 'Failed to persist user' })
   }
 
+  if (isNewUser && typeof ref === 'string' && UUID_RE.test(ref) && ref !== user.id) {
+    const { data: referrer } = await supabase.from('users').select('id').eq('id', ref).maybeSingle()
+    if (referrer) {
+      await supabase.from('users').update({ referred_by: ref }).eq('id', user.id)
+      user.referred_by = ref
+    }
+  }
+
   if (user.is_banned) {
     return res.status(403).json({
       error: `Тебе заблоковано.${user.ban_reason ? ` Причина: ${user.ban_reason}` : ''}`,
@@ -378,6 +395,41 @@ app.post('/auth/telegram', async (req, res) => {
 
   const token = jwt.sign({ sub: user.id, telegram_id: user.telegram_id }, JWT_SECRET, { expiresIn: '30d' })
   res.json({ token, user: { ...user, ...(await computeUserStats(user.id)) } })
+})
+
+// Credits both sides of a referral the first time the referred user takes a
+// real action (joins or creates an event) — not on signup alone, to avoid
+// paying out for accounts that never actually engage. Guarded update makes
+// this safe to call from both /events/:id/join and POST /events without
+// double-crediting if both somehow race.
+async function maybeRewardReferral(userId) {
+  const { data: user } = await supabase.from('users').select('referred_by, referral_reward_claimed').eq('id', userId).single()
+  if (!user?.referred_by || user.referral_reward_claimed) return
+
+  const { data: claimed } = await supabase
+    .from('users')
+    .update({ referral_reward_claimed: true })
+    .eq('id', userId)
+    .eq('referral_reward_claimed', false)
+    .select('referred_by')
+    .maybeSingle()
+  if (!claimed) return
+
+  await supabase.rpc('credit_stars_balance', { p_user_id: claimed.referred_by, p_amount: REFERRAL_REWARD_STARS })
+  await supabase.rpc('credit_stars_balance', { p_user_id: userId, p_amount: REFERRAL_REWARD_STARS })
+}
+
+app.get('/referrals/stats', requireAuth, async (req, res) => {
+  const { count: referred_count } = await supabase
+    .from('users').select('id', { count: 'exact', head: true }).eq('referred_by', req.auth.sub)
+  const { count: rewarded_count } = await supabase
+    .from('users').select('id', { count: 'exact', head: true }).eq('referred_by', req.auth.sub).eq('referral_reward_claimed', true)
+
+  res.json({
+    referred_count: referred_count ?? 0,
+    rewarded_count: rewarded_count ?? 0,
+    stars_earned: (rewarded_count ?? 0) * REFERRAL_REWARD_STARS,
+  })
 })
 
 // Requires a valid `Authorization: Bearer <jwt>` issued by /auth/telegram.
@@ -1585,6 +1637,7 @@ app.post('/events', requireAuth, async (req, res) => {
         `event_${newId}`, 'Переглянути захід',
       ).catch(() => {})
     }
+    maybeRewardReferral(req.auth.sub).catch(() => {})
 
     res.status(201).json({ event: shaped })
   } catch (err) {
@@ -1996,6 +2049,8 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
     console.error('Join failed:', error.message)
     return res.status(500).json({ error: 'Failed to join event' })
   }
+
+  maybeRewardReferral(req.auth.sub).catch(() => {})
 
   if (data.status === 'waitlisted') {
     const { count: aheadCount } = await supabase
