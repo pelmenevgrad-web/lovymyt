@@ -30,7 +30,9 @@ const io = new Server(httpServer, {
 })
 
 app.use(cors())
-app.use(express.json({ limit: '8mb' }))
+// 8mb was tight even for images once base64 (+33%) and JSON overhead are
+// added on top of MAX_IMAGE_BYTES; bumped to fit short battle videos too.
+app.use(express.json({ limit: '25mb' }))
 
 // No DB hit on purpose — meant for an external uptime pinger (e.g.
 // UptimeRobot) to keep Render's free tier from spinning the service down
@@ -55,6 +57,7 @@ const PRO_DURATION_DAYS = 30
 const STARS_TOPUP_PACKAGES = [100, 300, 750]
 const FREE_ACTIVE_EVENTS_LIMIT = 2
 const FREE_CLUB_LIMIT = 1
+const BATTLE_DURATION_HOURS = 4
 
 // Хвилі — окрема від Stars шкала прогресу за реферальну програму. На
 // відміну від Stars (реальні гроші), хвилі ні на що не обмінюються і
@@ -330,6 +333,25 @@ async function notifyAboutNewEvent(event, creatorId) {
     if (!(u.notify_all_events || inRadius)) return null
     return notifyUser(u.telegram_id, text, `event_${event.id}`)
   }))
+}
+
+// Announces a battle going live to everyone who opted into all-events
+// notifications — battles span two arbitrary locations, so (unlike
+// notifyAboutNewEvent) there's no single point to radius-check against.
+async function notifyBattleLive(battleId, challengerTitle, opponentTitle, excludeIds) {
+  const { data: candidates, error } = await supabase
+    .from('users')
+    .select('telegram_id')
+    .not('id', 'in', `(${excludeIds.join(',')})`)
+    .eq('notify_all_events', true)
+
+  if (error) {
+    console.error('Fetching battle notify candidates failed:', error.message)
+    return
+  }
+
+  const text = `⚔️ Баттл заходів почався: «${challengerTitle}» проти «${opponentTitle}» — голосуй, у кого крутіший!`
+  await Promise.all(candidates.map(u => notifyUser(u.telegram_id, text, `battle_${battleId}`, 'Дивитись баттл')))
 }
 
 // Health check
@@ -2652,6 +2674,24 @@ async function uploadImageDataUrl(dataUrl, bucket, pathPrefix) {
   return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl
 }
 
+const MAX_VIDEO_BYTES = 15 * 1024 * 1024
+
+// Same shape as uploadImageDataUrl but for the short battle-post video
+// clips — capped bigger since a few seconds of camera footage is naturally
+// heavier than a photo, still bounded so nobody uploads a full recording.
+async function uploadVideoDataUrl(dataUrl, bucket, pathPrefix) {
+  const match = /^data:(video\/(?:mp4|webm|quicktime));base64,(.+)$/.exec(dataUrl)
+  if (!match) throw new ImageUploadError('Непідтримуваний формат відео')
+  const [, mime, base64Data] = match
+  const buffer = Buffer.from(base64Data, 'base64')
+  if (buffer.length > MAX_VIDEO_BYTES) throw new ImageUploadError('Відео завелике (макс. 15 МБ) — запиши коротший кружечок')
+  const ext = mime.split('/')[1].replace('quicktime', 'mov')
+  const path = `${pathPrefix}-${Date.now()}.${ext}`
+  const { error } = await supabase.storage.from(bucket).upload(path, buffer, { contentType: mime })
+  if (error) throw error
+  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl
+}
+
 // Resolves events.cover_image_url from request input: an already-hosted URL
 // (unchanged on edit) passes through, a new data: URL gets uploaded, and
 // null/omitted clears it.
@@ -2737,6 +2777,291 @@ app.delete('/events/:id/photos/:photoId', requireAuth, async (req, res) => {
 
   await supabase.from('event_photos').delete().eq('id', photo.id)
   res.json({ ok: true })
+})
+
+// ============================================================
+// Баттли: організатор викликає організатора іншого активного заходу.
+// Суперник приймає/відхиляє; після прийняття баттл стає публічним —
+// глядачі голосують за сторону (1 голос/юзер) і донатять Stars у
+// призовий фонд, який виплачується переможцю коли sweepBattles()
+// закриває баттл по закінченню ends_at.
+// ============================================================
+
+const ACTIVE_EVENT_STATUSES = ['planned', 'gathering', 'active']
+
+const BATTLE_SELECT = `
+  id, status, prize_pool, winner_id, ends_at, created_at,
+  challenger_id, opponent_id,
+  challenger_event:events!battles_challenger_event_id_fkey(id, title, cover_image_url),
+  opponent_event:events!battles_opponent_event_id_fkey(id, title, cover_image_url),
+  challenger:users!battles_challenger_id_fkey(id, first_name, avatar_url),
+  opponent:users!battles_opponent_id_fkey(id, first_name, avatar_url)
+`
+
+async function shapeBattle(row, viewerId) {
+  const { data: votes } = await supabase.from('battle_votes').select('voter_id, side_id').eq('battle_id', row.id)
+  const challengerVotes = (votes ?? []).filter(v => v.side_id === row.challenger_id).length
+  const opponentVotes = (votes ?? []).filter(v => v.side_id === row.opponent_id).length
+  const myVote = viewerId ? (votes ?? []).find(v => v.voter_id === viewerId)?.side_id ?? null : null
+
+  return {
+    id: row.id,
+    status: row.status,
+    prize_pool: row.prize_pool,
+    winner_id: row.winner_id,
+    ends_at: row.ends_at,
+    created_at: row.created_at,
+    challenger: {
+      event_id: row.challenger_event?.id, event_title: row.challenger_event?.title,
+      cover_image_url: row.challenger_event?.cover_image_url,
+      organizer_id: row.challenger_id,
+      organizer_name: row.challenger?.first_name, organizer_avatar: row.challenger?.avatar_url,
+      votes: challengerVotes,
+    },
+    opponent: {
+      event_id: row.opponent_event?.id, event_title: row.opponent_event?.title,
+      cover_image_url: row.opponent_event?.cover_image_url,
+      organizer_id: row.opponent_id,
+      organizer_name: row.opponent?.first_name, organizer_avatar: row.opponent?.avatar_url,
+      votes: opponentVotes,
+    },
+    my_vote: myVote,
+    is_participant: viewerId === row.challenger_id || viewerId === row.opponent_id,
+  }
+}
+
+app.post('/battles', requireAuth, async (req, res) => {
+  const { challenger_event_id, opponent_event_id } = req.body ?? {}
+  if (!challenger_event_id || !opponent_event_id || challenger_event_id === opponent_event_id) {
+    return res.status(400).json({ error: 'Обери два різні заходи' })
+  }
+
+  const { data: events, error } = await supabase
+    .from('events')
+    .select('id, creator_id, title, status')
+    .in('id', [challenger_event_id, opponent_event_id])
+  if (error || !events || events.length !== 2) {
+    return res.status(404).json({ error: 'Захід не знайдено' })
+  }
+  const challengerEvent = events.find(e => e.id === challenger_event_id)
+  const opponentEvent = events.find(e => e.id === opponent_event_id)
+
+  if (challengerEvent.creator_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Можна викликати тільки від імені свого заходу' })
+  }
+  if (opponentEvent.creator_id === req.auth.sub) {
+    return res.status(400).json({ error: 'Не можна викликати самого себе' })
+  }
+  if (!ACTIVE_EVENT_STATUSES.includes(challengerEvent.status) || !ACTIVE_EVENT_STATUSES.includes(opponentEvent.status)) {
+    return res.status(400).json({ error: 'Обидва заходи мають бути ще активними' })
+  }
+
+  const { data: existing } = await supabase
+    .from('battles')
+    .select('id')
+    .in('status', ['pending', 'active'])
+    .or(`and(challenger_event_id.eq.${challenger_event_id},opponent_event_id.eq.${opponent_event_id}),and(challenger_event_id.eq.${opponent_event_id},opponent_event_id.eq.${challenger_event_id})`)
+    .maybeSingle()
+  if (existing) {
+    return res.status(400).json({ error: 'Баттл між цими заходами вже існує' })
+  }
+
+  const { data: battle, error: insertErr } = await supabase
+    .from('battles')
+    .insert({
+      challenger_event_id, opponent_event_id,
+      challenger_id: req.auth.sub, opponent_id: opponentEvent.creator_id,
+    })
+    .select('id')
+    .single()
+  if (insertErr) {
+    console.error('Creating battle failed:', insertErr.message)
+    return res.status(500).json({ error: 'Failed to create battle' })
+  }
+
+  const { data: opponentUser } = await supabase.from('users').select('telegram_id').eq('id', opponentEvent.creator_id).single()
+  notifyUser(
+    opponentUser?.telegram_id,
+    `⚔️ Виклик на баттл! Організатор заходу «${challengerEvent.title}» хоче позмагатись з твоїм «${opponentEvent.title}» — у кого крутіший захід?`,
+    `battle_${battle.id}`, 'Переглянути виклик',
+  ).catch(() => {})
+
+  res.status(201).json({ battle_id: battle.id })
+})
+
+app.get('/battles', requireAuth, async (req, res) => {
+  const { data, error } = await supabase
+    .from('battles')
+    .select(BATTLE_SELECT)
+    .or(`status.eq.active,challenger_id.eq.${req.auth.sub},opponent_id.eq.${req.auth.sub}`)
+    .order('created_at', { ascending: false })
+    .limit(50)
+  if (error) {
+    console.error('Fetching battles failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load battles' })
+  }
+  res.json({ battles: await Promise.all((data ?? []).map(row => shapeBattle(row, req.auth.sub))) })
+})
+
+app.get('/battles/:id', requireAuth, async (req, res) => {
+  const { data: battle, error } = await supabase.from('battles').select(BATTLE_SELECT).eq('id', req.params.id).single()
+  if (error || !battle) return res.status(404).json({ error: 'Battle not found' })
+  res.json({ battle: await shapeBattle(battle, req.auth.sub) })
+})
+
+app.post('/battles/:id/accept', requireAuth, async (req, res) => {
+  const { data: battle } = await supabase
+    .from('battles')
+    .select('opponent_id, challenger_id, status, challenger_event_id, opponent_event_id')
+    .eq('id', req.params.id)
+    .single()
+  if (!battle) return res.status(404).json({ error: 'Battle not found' })
+  if (battle.opponent_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки викликаний організатор може прийняти виклик' })
+  }
+  if (battle.status !== 'pending') return res.status(400).json({ error: 'Виклик вже неактуальний' })
+
+  const endsAt = new Date(Date.now() + BATTLE_DURATION_HOURS * 3_600_000)
+  const { data: accepted, error } = await supabase
+    .from('battles')
+    .update({ status: 'active', ends_at: endsAt.toISOString() })
+    .eq('id', req.params.id).eq('status', 'pending')
+    .select('id')
+    .maybeSingle()
+  if (error || !accepted) return res.status(500).json({ error: 'Failed to accept battle' })
+
+  const [{ data: challengerEvent }, { data: opponentEvent }] = await Promise.all([
+    supabase.from('events').select('title').eq('id', battle.challenger_event_id).single(),
+    supabase.from('events').select('title').eq('id', battle.opponent_event_id).single(),
+  ])
+  notifyBattleLive(
+    req.params.id, challengerEvent?.title, opponentEvent?.title,
+    [battle.challenger_id, battle.opponent_id],
+  ).catch(() => {})
+  io.to(`battle:${req.params.id}`).emit('battle_update')
+
+  res.json({ ok: true })
+})
+
+app.post('/battles/:id/decline', requireAuth, async (req, res) => {
+  const { data: battle } = await supabase.from('battles').select('opponent_id, status').eq('id', req.params.id).single()
+  if (!battle) return res.status(404).json({ error: 'Battle not found' })
+  if (battle.opponent_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки викликаний організатор може відхилити виклик' })
+  }
+  if (battle.status !== 'pending') return res.status(400).json({ error: 'Виклик вже неактуальний' })
+
+  await supabase.from('battles').update({ status: 'declined' }).eq('id', req.params.id).eq('status', 'pending')
+  res.json({ ok: true })
+})
+
+app.post('/battles/:id/vote', requireAuth, async (req, res) => {
+  const { side_id } = req.body ?? {}
+  const { data: battle } = await supabase.from('battles').select('status, challenger_id, opponent_id').eq('id', req.params.id).single()
+  if (!battle) return res.status(404).json({ error: 'Battle not found' })
+  if (battle.status !== 'active') return res.status(400).json({ error: 'Голосування доступне тільки під час активного баттлу' })
+  if (![battle.challenger_id, battle.opponent_id].includes(side_id)) {
+    return res.status(400).json({ error: 'Invalid side_id' })
+  }
+  if ([battle.challenger_id, battle.opponent_id].includes(req.auth.sub)) {
+    return res.status(403).json({ error: 'Організатори не можуть голосувати у своєму баттлі' })
+  }
+
+  const { error } = await supabase
+    .from('battle_votes')
+    .upsert({ battle_id: req.params.id, voter_id: req.auth.sub, side_id }, { onConflict: 'battle_id,voter_id' })
+  if (error) {
+    console.error('Voting failed:', error.message)
+    return res.status(500).json({ error: 'Failed to vote' })
+  }
+
+  io.to(`battle:${req.params.id}`).emit('battle_update')
+  res.json({ ok: true })
+})
+
+app.post('/battles/:id/donate', requireAuth, async (req, res) => {
+  const amount = Number(req.body?.amount)
+  const { side_id } = req.body ?? {}
+  if (!Number.isInteger(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'amount має бути додатним цілим числом' })
+  }
+
+  const { data: battle } = await supabase.from('battles').select('status, challenger_id, opponent_id').eq('id', req.params.id).single()
+  if (!battle) return res.status(404).json({ error: 'Battle not found' })
+  if (battle.status !== 'active') return res.status(400).json({ error: 'Донати доступні тільки під час активного баттлу' })
+  if (![battle.challenger_id, battle.opponent_id].includes(side_id)) {
+    return res.status(400).json({ error: 'Invalid side_id' })
+  }
+
+  const { error: debitErr } = await supabase.rpc('debit_stars_balance', { p_user_id: req.auth.sub, p_amount: amount })
+  if (debitErr) {
+    if (debitErr.message?.includes('insufficient_balance')) {
+      return res.status(400).json({ error: 'Недостатньо Stars на балансі' })
+    }
+    console.error('Debiting battle donation failed:', debitErr.message)
+    return res.status(500).json({ error: 'Failed to donate' })
+  }
+
+  const { data: newTotal, error: prizeErr } = await supabase.rpc('add_battle_prize', { p_battle_id: req.params.id, p_amount: amount })
+  if (prizeErr) {
+    console.error('Adding to battle prize pool failed:', prizeErr.message)
+    // Donor was already debited — refund so a mid-flight failure doesn't
+    // just delete their Stars.
+    await supabase.rpc('credit_stars_balance', { p_user_id: req.auth.sub, p_amount: amount }).catch(() => {})
+    return res.status(500).json({ error: 'Failed to donate' })
+  }
+
+  await supabase.from('battle_donations').insert({ battle_id: req.params.id, donor_id: req.auth.sub, side_id, amount })
+
+  io.to(`battle:${req.params.id}`).emit('battle_update')
+  res.json({ ok: true, prize_pool: newTotal })
+})
+
+app.post('/battles/:id/posts', requireAuth, async (req, res) => {
+  const { media, media_type } = req.body ?? {}
+  if (!media || !['photo', 'video'].includes(media_type)) {
+    return res.status(400).json({ error: 'Missing media or media_type' })
+  }
+
+  const { data: battle } = await supabase.from('battles').select('status, challenger_id, opponent_id').eq('id', req.params.id).single()
+  if (!battle) return res.status(404).json({ error: 'Battle not found' })
+  if (battle.status !== 'active') return res.status(400).json({ error: 'Постити можна тільки під час активного баттлу' })
+  if (![battle.challenger_id, battle.opponent_id].includes(req.auth.sub)) {
+    return res.status(403).json({ error: 'Постити можуть тільки організатори баттлу' })
+  }
+
+  try {
+    const media_url = media_type === 'video'
+      ? await uploadVideoDataUrl(media, 'chat-images', `battles/${req.params.id}/${req.auth.sub}`)
+      : await uploadImageDataUrl(media, 'chat-images', `battles/${req.params.id}/${req.auth.sub}`)
+
+    const { data: post, error } = await supabase
+      .from('battle_posts')
+      .insert({ battle_id: req.params.id, side_id: req.auth.sub, media_url, media_type })
+      .select('id, side_id, media_url, media_type, created_at')
+      .single()
+    if (error) throw error
+
+    io.to(`battle:${req.params.id}`).emit('new_post', post)
+    res.status(201).json({ post })
+  } catch (err) {
+    if (err instanceof ImageUploadError) return res.status(400).json({ error: err.message })
+    console.error('Posting battle media failed:', err.message)
+    res.status(500).json({ error: 'Failed to post media' })
+  }
+})
+
+app.get('/battles/:id/posts', requireAuth, async (req, res) => {
+  const { data, error } = await supabase
+    .from('battle_posts')
+    .select('id, side_id, media_url, media_type, created_at')
+    .eq('battle_id', req.params.id)
+    .order('created_at', { ascending: false })
+  if (error) {
+    console.error('Fetching battle posts failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load posts' })
+  }
+  res.json({ posts: data })
 })
 
 // Message history for an event's chat
@@ -3520,6 +3845,15 @@ io.on('connection', (socket) => {
   socket.on('leave_venue_chat', (inquiryId) => {
     socket.leave(`venue_inquiry:${inquiryId}`)
   })
+
+  // Battles are public spectacle, not a private chat — no access check.
+  socket.on('join_battle', (battleId) => {
+    socket.join(`battle:${battleId}`)
+  })
+
+  socket.on('leave_battle', (battleId) => {
+    socket.leave(`battle:${battleId}`)
+  })
 })
 
 // Counts accepted participants per event — sweeps work off raw event rows,
@@ -3645,6 +3979,54 @@ async function sweepExpiredPro() {
   if (error) console.error('PRO expiry sweep failed:', error.message)
 }
 
+// Closes out battles once ends_at passes: tallies votes, pays the prize
+// pool to whichever side has more (a tie pays nobody — no reason to design
+// a split for a case that'll rarely happen), and notifies both organizers.
+async function sweepBattles() {
+  const { data: candidates, error } = await supabase
+    .from('battles')
+    .select('id, challenger_id, opponent_id, prize_pool')
+    .eq('status', 'active')
+    .lt('ends_at', new Date().toISOString())
+
+  if (error) return console.error('Battle sweep failed:', error.message)
+  if (!candidates || candidates.length === 0) return
+
+  await Promise.all(candidates.map(async (battle) => {
+    const { data: votes } = await supabase.from('battle_votes').select('side_id').eq('battle_id', battle.id)
+    const challengerVotes = (votes ?? []).filter(v => v.side_id === battle.challenger_id).length
+    const opponentVotes = (votes ?? []).filter(v => v.side_id === battle.opponent_id).length
+    const winner_id = challengerVotes === opponentVotes
+      ? null
+      : (challengerVotes > opponentVotes ? battle.challenger_id : battle.opponent_id)
+
+    const { data: completed, error: updateErr } = await supabase
+      .from('battles')
+      .update({ status: 'completed', winner_id })
+      .eq('id', battle.id).eq('status', 'active')
+      .select('id')
+      .maybeSingle()
+    if (updateErr || !completed) return console.error('Completing battle failed:', updateErr?.message ?? 'already closed')
+
+    if (winner_id && battle.prize_pool > 0) {
+      await supabase.rpc('credit_stars_balance', { p_user_id: winner_id, p_amount: battle.prize_pool })
+        .catch(err => console.error('Battle prize payout failed:', err.message))
+    }
+
+    const [{ data: challenger }, { data: opponent }] = await Promise.all([
+      supabase.from('users').select('telegram_id').eq('id', battle.challenger_id).single(),
+      supabase.from('users').select('telegram_id').eq('id', battle.opponent_id).single(),
+    ])
+    const resultText = winner_id
+      ? `🏆 Баттл завершено! Переможець отримує ${battle.prize_pool} ⭐ призового фонду.`
+      : `🤝 Баттл завершено внічию — голоси порівну, фонд не виплачується.`
+    notifyUser(challenger?.telegram_id, resultText, `battle_${battle.id}`, 'Переглянути результат').catch(() => {})
+    notifyUser(opponent?.telegram_id, resultText, `battle_${battle.id}`, 'Переглянути результат').catch(() => {})
+
+    io.to(`battle:${battle.id}`).emit('battle_update')
+  }))
+}
+
 async function start() {
   await new Promise((resolve) => httpServer.listen(PORT, resolve))
   console.log(`Backend listening on port ${PORT}`)
@@ -3657,6 +4039,8 @@ async function start() {
   setInterval(sweepExpiredEvents, 5 * 60_000)
   sweepExpiredPro()
   setInterval(sweepExpiredPro, 5 * 60_000)
+  sweepBattles()
+  setInterval(sweepBattles, 5 * 60_000)
 
   if (WEBHOOK_URL) {
     const webhookEndpoint = `${WEBHOOK_URL}/webhook`

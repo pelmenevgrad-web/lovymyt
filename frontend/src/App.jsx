@@ -35,6 +35,7 @@ import ClubsScreen from './screens/ClubsScreen.jsx'
 import MyClubsScreen from './screens/MyClubsScreen.jsx'
 import CreateClubScreen from './screens/CreateClubScreen.jsx'
 import ClubDetailScreen from './screens/ClubDetailScreen.jsx'
+import BattleScreen from './screens/BattleScreen.jsx'
 import WelcomeScreen from './screens/WelcomeScreen.jsx'
 import { useAuth } from './context/AuthContext.jsx'
 
@@ -211,6 +212,7 @@ export default function App() {
   const startParam = WebApp.initDataUnsafe?.start_param
   const initialPath = startParam?.startsWith('chat_') ? `/events/${startParam.slice('chat_'.length)}/chat`
     : startParam?.startsWith('review_') ? `/events/${startParam.slice('review_'.length)}/review`
+    : startParam?.startsWith('battle_') ? `/battles/${startParam.slice('battle_'.length)}`
     : startParam?.startsWith('event_') ? `/events/${startParam.slice('event_'.length)}`
     : startParam?.startsWith('venue_chat_') ? `/venues/inquiries/${startParam.slice('venue_chat_'.length)}`
     : startParam?.startsWith('venue_') ? `/venues/${startParam.slice('venue_'.length)}`
@@ -256,6 +258,7 @@ export default function App() {
         <Route path="/clubs/new" element={<CreateClubScreen />} />
         <Route path="/clubs/:id/edit" element={<CreateClubScreen />} />
         <Route path="/clubs/:id" element={<ClubDetailScreen />} />
+        <Route path="/battles/:id" element={<BattleScreen />} />
       </Routes>
       <BottomNav />
     </MemoryRouter>

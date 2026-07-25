@@ -3,14 +3,15 @@ const DEFAULT_TIMEOUT_MS = 15_000
 
 export async function apiFetch(path, options = {}) {
   const token = localStorage.getItem('lovymyt_token')
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, ...fetchOptions } = options
 
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
   let res
   try {
     res = await fetch(`${API_URL}${path}`, {
-      ...options,
+      ...fetchOptions,
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
@@ -20,7 +21,7 @@ export async function apiFetch(path, options = {}) {
     })
   } catch (err) {
     if (err.name === 'AbortError') {
-      throw new Error(`Request timed out after ${DEFAULT_TIMEOUT_MS / 1000}s: ${path}`)
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s: ${path}`)
     }
     throw new Error(`Network error calling ${path}: ${err.message}`)
   } finally {

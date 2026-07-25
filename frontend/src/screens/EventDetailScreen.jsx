@@ -6,7 +6,7 @@ import WebApp from '@twa-dev/sdk'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
   Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX, Star, Lock, Repeat,
-  Fuel, CheckCircle2, QrCode, ScanLine,
+  Fuel, CheckCircle2, QrCode, ScanLine, Swords,
 } from 'lucide-react'
 import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
@@ -14,6 +14,7 @@ import { Avatar, AvatarStack, CategoryBadges } from '../components/EventCard.jsx
 import BackButton from '../components/BackButton.jsx'
 import NearbyPlacesList from '../components/NearbyPlacesList.jsx'
 import CheckinQrSheet, { CheckedInBadge } from '../components/CheckinQrSheet.jsx'
+import BattleChallengeSheet from '../components/BattleChallengeSheet.jsx'
 import WeatherBadge from '../components/WeatherBadge.jsx'
 import EventGallery from '../components/EventGallery.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -255,6 +256,7 @@ export default function EventDetailScreen() {
   const [continuing, setContinuing] = useState(false)
   const [, forceTick] = useState(0)
   const [showCheckinSheet, setShowCheckinSheet] = useState(false)
+  const [showBattleSheet, setShowBattleSheet] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [checkinMsg, setCheckinMsg] = useState(null)
 
@@ -640,6 +642,20 @@ export default function EventDetailScreen() {
           </div>
         )}
 
+        {/* Challenge this event's organizer to a battle — only makes sense
+            if the viewer runs an active event of their own to put up. */}
+        {!event.is_creator && !isEnded && (
+          <div style={{ marginBottom: 16 }}>
+            <button
+              className="chip"
+              onClick={() => setShowBattleSheet(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <Swords size={14} /> Викликати на баттл
+            </button>
+          </div>
+        )}
+
         {/* Participants list */}
         {participants.length > 0 && (
           <>
@@ -881,6 +897,9 @@ export default function EventDetailScreen() {
 
       {showCheckinSheet && (
         <CheckinQrSheet eventId={id} onClose={() => setShowCheckinSheet(false)} />
+      )}
+      {showBattleSheet && (
+        <BattleChallengeSheet opponentEventId={id} onClose={() => setShowBattleSheet(false)} />
       )}
     </div>
   )
