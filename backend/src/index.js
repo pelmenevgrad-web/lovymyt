@@ -553,7 +553,7 @@ app.post('/pro/subscribe', requireAuth, async (req, res) => {
 
 app.post('/venues', requireAuth, async (req, res) => {
   const { title, description, address_text, lat, lng, photo, price_info } = req.body ?? {}
-  if (!title?.trim() || !address_text?.trim() || lat == null || lng == null) {
+  if (!title?.trim() || !address_text?.trim() || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
     return res.status(400).json({ error: 'Missing required fields' })
   }
   if (!photo) {
@@ -566,7 +566,7 @@ app.post('/venues', requireAuth, async (req, res) => {
       .from('venues')
       .insert({
         owner_id: req.auth.sub, title: title.trim(), description: description?.trim() || null,
-        address_text: address_text.trim(), lat, lng, photo_url, price_info: price_info?.trim() || null,
+        address_text: address_text.trim(), lat: Number(lat), lng: Number(lng), photo_url, price_info: price_info?.trim() || null,
       })
       .select()
       .single()
@@ -640,14 +640,14 @@ app.patch('/venues/:id', requireAuth, async (req, res) => {
   }
 
   const { title, description, address_text, lat, lng, photo, price_info } = req.body ?? {}
-  if (!title?.trim() || !address_text?.trim() || lat == null || lng == null) {
+  if (!title?.trim() || !address_text?.trim() || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
     return res.status(400).json({ error: 'Missing required fields' })
   }
 
   try {
     const patch = {
       title: title.trim(), description: description?.trim() || null,
-      address_text: address_text.trim(), lat, lng, price_info: price_info?.trim() || null,
+      address_text: address_text.trim(), lat: Number(lat), lng: Number(lng), price_info: price_info?.trim() || null,
     }
     if (photo) {
       patch.photo_url = await uploadImageDataUrl(photo, 'chat-images', `venues/${req.auth.sub}`)
@@ -660,8 +660,16 @@ app.patch('/venues/:id', requireAuth, async (req, res) => {
       patch.reviewed_at = null
     }
 
-    const { data, error } = await supabase.from('venues').update(patch).eq('id', req.params.id).select().single()
+    // Re-check status in the same query that writes (not just at the fetch
+    // above) — an admin could approve the venue while this request was
+    // awaiting the image upload, and without this the write would still go
+    // through, silently editing a now-public, already-moderated listing.
+    const { data, error } = await supabase
+      .from('venues').update(patch).eq('id', req.params.id).neq('status', 'approved').select().maybeSingle()
     if (error) throw error
+    if (!data) {
+      return res.status(400).json({ error: 'Локацію вже підтверджено — редагування недоступне' })
+    }
     res.json({ venue: data })
   } catch (err) {
     if (err instanceof ImageUploadError) {
