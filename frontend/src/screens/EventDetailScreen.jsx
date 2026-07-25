@@ -15,6 +15,7 @@ import BackButton from '../components/BackButton.jsx'
 import NearbyPlacesList from '../components/NearbyPlacesList.jsx'
 import CheckinQrSheet, { CheckedInBadge } from '../components/CheckinQrSheet.jsx'
 import WeatherBadge from '../components/WeatherBadge.jsx'
+import EventGallery from '../components/EventGallery.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
@@ -859,6 +860,12 @@ export default function EventDetailScreen() {
           >
             Оцінити учасників
           </button>
+        )}
+
+        {event.status === 'completed' && (
+          <div style={{ marginTop: 16 }}>
+            <EventGallery eventId={id} canUpload={event.is_creator || alreadyJoined} myUserId={user?.id} />
+          </div>
         )}
 
         {event.status === 'completed' && (

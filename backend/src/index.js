@@ -2602,6 +2602,81 @@ async function resolveCoverImage(coverImage, userId) {
   return coverImage
 }
 
+const MAX_GALLERY_PHOTOS_PER_USER = 5
+
+// Post-event photo gallery — participants/organizer add memories once the
+// event is over, visible to anyone viewing the event page (same audience as
+// the event details themselves, no extra gating beyond canAccessChat for
+// the upload/delete actions).
+app.get('/events/:id/photos', async (req, res) => {
+  const { data, error } = await supabase
+    .from('event_photos')
+    .select('id, image_url, created_at, user:users(id, first_name, avatar_url)')
+    .eq('event_id', req.params.id)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Fetching event photos failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load photos' })
+  }
+  res.json({ photos: data })
+})
+
+app.post('/events/:id/photos', requireAuth, async (req, res) => {
+  const { data: event } = await supabase.from('events').select('status').eq('id', req.params.id).single()
+  if (!event) return res.status(404).json({ error: 'Event not found' })
+  if (event.status !== 'completed') {
+    return res.status(400).json({ error: 'Фото можна додавати тільки після завершення заходу' })
+  }
+
+  const allowed = await canAccessChat(req.params.id, req.auth.sub)
+  if (!allowed) return res.status(403).json({ error: 'Доступно тільки учасникам заходу' })
+
+  const { count } = await supabase
+    .from('event_photos')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_id', req.params.id)
+    .eq('user_id', req.auth.sub)
+  if ((count ?? 0) >= MAX_GALLERY_PHOTOS_PER_USER) {
+    return res.status(400).json({ error: `Максимум ${MAX_GALLERY_PHOTOS_PER_USER} фото від одного учасника` })
+  }
+
+  try {
+    const image_url = await uploadImageDataUrl(req.body?.photo, 'chat-images', `event-gallery/${req.params.id}/${req.auth.sub}`)
+    const { data, error } = await supabase
+      .from('event_photos')
+      .insert({ event_id: req.params.id, user_id: req.auth.sub, image_url })
+      .select('id, image_url, created_at, user:users(id, first_name, avatar_url)')
+      .single()
+    if (error) throw error
+    res.status(201).json({ photo: data })
+  } catch (err) {
+    if (err instanceof ImageUploadError) return res.status(400).json({ error: err.message })
+    console.error('Uploading event photo failed:', err.message)
+    res.status(500).json({ error: 'Failed to upload photo' })
+  }
+})
+
+app.delete('/events/:id/photos/:photoId', requireAuth, async (req, res) => {
+  const { data: event } = await supabase.from('events').select('creator_id').eq('id', req.params.id).single()
+  if (!event) return res.status(404).json({ error: 'Event not found' })
+
+  const { data: photo } = await supabase
+    .from('event_photos')
+    .select('id, user_id')
+    .eq('id', req.params.photoId)
+    .eq('event_id', req.params.id)
+    .maybeSingle()
+  if (!photo) return res.status(404).json({ error: 'Photo not found' })
+
+  if (photo.user_id !== req.auth.sub && event.creator_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Можна видаляти тільки свої фото' })
+  }
+
+  await supabase.from('event_photos').delete().eq('id', photo.id)
+  res.json({ ok: true })
+})
+
 // Message history for an event's chat
 app.get('/events/:id/chat/messages', requireAuth, async (req, res) => {
   const allowed = await canAccessChat(req.params.id, req.auth.sub)
