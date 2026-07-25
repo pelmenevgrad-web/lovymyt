@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import { Search, Fuel } from 'lucide-react'
+import NearbyPlacesList from './NearbyPlacesList.jsx'
 
 const pickerIcon = L.divIcon({
   className: '',
@@ -10,14 +11,7 @@ const pickerIcon = L.divIcon({
   iconAnchor: [11, 11],
 })
 
-// The app's usual minimal CartoDB style (Positron/Dark Matter) is deliberately
-// stripped of most POI icons for a clean look. The standard OSM "Carto" tiles
-// already render shops/pharmacies/fuel stations natively — no separate POI
-// API needed, so the "nearby amenities" toggle just swaps tile layer + zooms
-// in rather than calling anything.
-const STANDARD_OSM_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-
-function MapPicker({ lat, lng, onMapChange, isDark, mapRef, showPOIs }) {
+function MapPicker({ lat, lng, onMapChange, isDark, mapRef }) {
   function ClickCapture() {
     useMapEvents({ click: (e) => onMapChange(e.latlng.lat, e.latlng.lng) })
     return null
@@ -27,18 +21,15 @@ function MapPicker({ lat, lng, onMapChange, isDark, mapRef, showPOIs }) {
     <MapContainer
       ref={mapRef}
       center={[lat, lng]}
-      zoom={showPOIs ? 19 : 13}
+      zoom={13}
       style={{ height: 180, width: '100%', borderRadius: 'var(--radius-md)', marginTop: 8 }}
       zoomControl={false}
     >
       <TileLayer
-        key={showPOIs ? 'osm' : (isDark ? 'dark' : 'light')}
-        url={showPOIs
-          ? STANDARD_OSM_URL
-          : isDark
-            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
-        attribution={showPOIs ? '&copy; OpenStreetMap contributors' : ''}
+        url={isDark
+          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
+        attribution=""
       />
       <ClickCapture />
       <Marker
@@ -79,7 +70,7 @@ export default function LocationSearchPicker({
   const [suggestions, setSuggestions] = useState([])
   const [searching, setSearching] = useState(false)
   const [focused, setFocused] = useState(false)
-  const [showPOIs, setShowPOIs] = useState(false)
+  const [showNearby, setShowNearby] = useState(false)
   const mapRef = useRef(null)
 
   useEffect(() => {
@@ -166,20 +157,21 @@ export default function LocationSearchPicker({
       </div>
 
       <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>{hint}</div>
+      <MapPicker lat={lat} lng={lng} isDark={isDark} mapRef={mapRef} onMapChange={handleMapChange} />
       <button
         type="button"
         className="chip"
         style={{
           marginTop: 8,
-          background: showPOIs ? 'var(--accent-light)' : 'var(--card)',
-          color: showPOIs ? 'var(--accent)' : 'var(--text)',
-          border: '1.5px solid ' + (showPOIs ? 'var(--accent)' : 'var(--border)'),
+          background: showNearby ? 'var(--accent-light)' : 'var(--card)',
+          color: showNearby ? 'var(--accent)' : 'var(--text)',
+          border: '1.5px solid ' + (showNearby ? 'var(--accent)' : 'var(--border)'),
         }}
-        onClick={() => setShowPOIs(v => !v)}
+        onClick={() => setShowNearby(v => !v)}
       >
-        <Fuel size={14} /> {showPOIs ? 'Звичайна карта' : 'Показати заправки/магазини поруч'}
+        <Fuel size={14} /> {showNearby ? 'Приховати список' : 'Заправки/магазини поруч'}
       </button>
-      <MapPicker lat={lat} lng={lng} isDark={isDark} mapRef={mapRef} onMapChange={handleMapChange} showPOIs={showPOIs} />
+      {showNearby && <NearbyPlacesList lat={lat} lng={lng} />}
     </div>
   )
 }

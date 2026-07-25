@@ -11,6 +11,7 @@ import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
 import { Avatar, AvatarStack, CategoryBadges } from '../components/EventCard.jsx'
 import BackButton from '../components/BackButton.jsx'
+import NearbyPlacesList from '../components/NearbyPlacesList.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
@@ -25,41 +26,34 @@ const eventPinIcon = L.divIcon({
 
 // Read-only map (no drag/click, unlike LocationSearchPicker) — shown only
 // when the exact address isn't hidden (radius_visibility). Same
-// "show nearby fuel/shops" toggle (tile-layer swap) as the create-event picker.
-// The app's usual minimal CartoDB style is deliberately stripped of most POI
-// icons for a clean look. Standard OSM "Carto" tiles already render shops/
-// pharmacies/fuel stations natively — no separate POI API needed, so the
-// toggle just swaps tile layer + zooms in rather than calling anything.
-const STANDARD_OSM_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+// "nearby fuel/shops" list (via Nominatim, see NearbyPlacesList) as the
+// create-event picker.
 
 function EventMap({ lat, lng }) {
-  const [showPOIs, setShowPOIs] = useState(false)
+  const [showNearby, setShowNearby] = useState(false)
 
   return (
     <div style={{ marginBottom: 16 }}>
       <MapContainer
-        center={[lat, lng]} zoom={showPOIs ? 19 : 14} zoomControl={false} dragging={false} scrollWheelZoom={false} doubleClickZoom={false}
+        center={[lat, lng]} zoom={14} zoomControl={false} dragging={false} scrollWheelZoom={false} doubleClickZoom={false}
         style={{ height: 160, width: '100%', borderRadius: 'var(--radius-md)' }}
       >
-        <TileLayer
-          key={showPOIs ? 'osm' : 'light'}
-          url={showPOIs ? STANDARD_OSM_URL : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
-          attribution={showPOIs ? '&copy; OpenStreetMap contributors' : ''}
-        />
+        <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="" />
         <Marker position={[lat, lng]} icon={eventPinIcon} />
       </MapContainer>
       <button
         className="chip"
         style={{
           marginTop: 8,
-          background: showPOIs ? 'var(--accent-light)' : 'var(--card)',
-          color: showPOIs ? 'var(--accent)' : 'var(--text)',
-          border: '1.5px solid ' + (showPOIs ? 'var(--accent)' : 'var(--border)'),
+          background: showNearby ? 'var(--accent-light)' : 'var(--card)',
+          color: showNearby ? 'var(--accent)' : 'var(--text)',
+          border: '1.5px solid ' + (showNearby ? 'var(--accent)' : 'var(--border)'),
         }}
-        onClick={() => setShowPOIs(v => !v)}
+        onClick={() => setShowNearby(v => !v)}
       >
-        <Fuel size={14} /> {showPOIs ? 'Звичайна карта' : 'Заправки/магазини поруч'}
+        <Fuel size={14} /> {showNearby ? 'Приховати список' : 'Заправки/магазини поруч'}
       </button>
+      {showNearby && <NearbyPlacesList lat={lat} lng={lng} />}
     </div>
   )
 }
