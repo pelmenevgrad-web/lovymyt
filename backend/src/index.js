@@ -56,23 +56,35 @@ const STARS_TOPUP_PACKAGES = [100, 300, 750]
 const FREE_ACTIVE_EVENTS_LIMIT = 2
 const FREE_CLUB_LIMIT = 1
 
-// Карма — окрема від Stars шкала прогресу за реферальну програму. На
-// відміну від Stars (реальні гроші), карма ні на що не обмінюється і
-// тільки відкриває пороги можливостей нижче — тому фармити її фейковими
+// Хвилі — окрема від Stars шкала прогресу за реферальну програму. На
+// відміну від Stars (реальні гроші), хвилі ні на що не обмінюються і
+// тільки відкривають пороги можливостей нижче — тому фармити їх фейковими
 // акаунтами немає сенсу.
-const KARMA_REFERRAL_REWARD = 10
-const KARMA_EXTRA_GALLERY_PHOTO = 100
-const KARMA_EXTRA_EVENT_SLOT = 150
-const KARMA_EXTRA_CLUB_SLOT = 200
+const WAVE_REFERRAL_REWARD = 10
+const WAVE_EXTRA_GALLERY_PHOTO = 100
+const WAVE_EXTRA_EVENT_SLOT = 150
+const WAVE_EXTRA_CLUB_SLOT = 200
+
+// Українське відмінювання лічильника: 1 хвиля, 2-4 хвилі, 5+ хвиль.
+function waveNoun(n) {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return 'хвиля'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'хвилі'
+  return 'хвиль'
+}
+function waveText(n) {
+  return `${n} ${waveNoun(n)}`
+}
 
 function galleryLimitFor(user) {
-  return MAX_GALLERY_PHOTOS_PER_USER + (user?.karma_points >= KARMA_EXTRA_GALLERY_PHOTO ? 1 : 0)
+  return MAX_GALLERY_PHOTOS_PER_USER + (user?.wave_points >= WAVE_EXTRA_GALLERY_PHOTO ? 1 : 0)
 }
 function eventLimitFor(user) {
-  return FREE_ACTIVE_EVENTS_LIMIT + (user?.karma_points >= KARMA_EXTRA_EVENT_SLOT ? 1 : 0)
+  return FREE_ACTIVE_EVENTS_LIMIT + (user?.wave_points >= WAVE_EXTRA_EVENT_SLOT ? 1 : 0)
 }
 function clubLimitFor(user) {
-  return FREE_CLUB_LIMIT + (user?.karma_points >= KARMA_EXTRA_CLUB_SLOT ? 1 : 0)
+  return FREE_CLUB_LIMIT + (user?.wave_points >= WAVE_EXTRA_CLUB_SLOT ? 1 : 0)
 }
 
 // Venue-ad tiers (radius = how far a venue shows up from the point an
@@ -434,20 +446,26 @@ async function maybeRewardReferral(userId) {
     .maybeSingle()
   if (!claimed) return
 
-  await supabase.rpc('credit_karma_balance', { p_user_id: claimed.referred_by, p_amount: KARMA_REFERRAL_REWARD })
-  await supabase.rpc('credit_karma_balance', { p_user_id: userId, p_amount: KARMA_REFERRAL_REWARD })
+  await supabase.rpc('credit_wave_balance', { p_user_id: claimed.referred_by, p_amount: WAVE_REFERRAL_REWARD })
+  await supabase.rpc('credit_wave_balance', { p_user_id: userId, p_amount: WAVE_REFERRAL_REWARD })
 }
 
 app.get('/referrals/stats', requireAuth, async (req, res) => {
-  const { count: referred_count } = await supabase
-    .from('users').select('id', { count: 'exact', head: true }).eq('referred_by', req.auth.sub)
-  const { count: rewarded_count } = await supabase
-    .from('users').select('id', { count: 'exact', head: true }).eq('referred_by', req.auth.sub).eq('referral_reward_claimed', true)
+  const { data: referrals } = await supabase
+    .from('users')
+    .select('id, first_name, avatar_url, referral_reward_claimed')
+    .eq('referred_by', req.auth.sub)
+    .order('created_at', { ascending: false })
+
+  const rewarded_count = (referrals ?? []).filter(r => r.referral_reward_claimed).length
 
   res.json({
-    referred_count: referred_count ?? 0,
-    rewarded_count: rewarded_count ?? 0,
-    karma_earned: (rewarded_count ?? 0) * KARMA_REFERRAL_REWARD,
+    referred_count: referrals?.length ?? 0,
+    rewarded_count,
+    waves_earned: rewarded_count * WAVE_REFERRAL_REWARD,
+    referrals: (referrals ?? []).map(r => ({
+      id: r.id, first_name: r.first_name, avatar_url: r.avatar_url, rewarded: r.referral_reward_claimed,
+    })),
   })
 })
 
@@ -987,12 +1005,12 @@ app.post('/clubs', requireAuth, async (req, res) => {
 
   const [{ count: existingClubs }, { data: owner }] = await Promise.all([
     supabase.from('clubs').select('id', { count: 'exact', head: true }).eq('creator_id', req.auth.sub),
-    supabase.from('users').select('karma_points').eq('id', req.auth.sub).single(),
+    supabase.from('users').select('wave_points').eq('id', req.auth.sub).single(),
   ])
   const clubLimit = clubLimitFor(owner)
   if ((existingClubs ?? 0) >= clubLimit) {
     return res.status(403).json({
-      error: `Можна створити не більше ${clubLimit} клуб(ів)${owner?.karma_points < KARMA_EXTRA_CLUB_SLOT ? ` (набери ${KARMA_EXTRA_CLUB_SLOT} карми за реферальну програму для +1)` : ''}.`,
+      error: `Можна створити не більше ${clubLimit} клуб(ів)${owner?.wave_points < WAVE_EXTRA_CLUB_SLOT ? ` (набери ${waveText(WAVE_EXTRA_CLUB_SLOT)} за реферальну програму для +1)` : ''}.`,
       code: 'FREE_CLUB_LIMIT',
     })
   }
@@ -1606,7 +1624,7 @@ app.post('/events', requireAuth, async (req, res) => {
 
   const { data: creator } = await supabase
     .from('users')
-    .select('is_pro, pro_expires_at, karma_points')
+    .select('is_pro, pro_expires_at, wave_points')
     .eq('id', req.auth.sub)
     .single()
 
@@ -1639,7 +1657,7 @@ app.post('/events', requireAuth, async (req, res) => {
     if (error) {
       if (error.message?.includes('event_limit_reached')) {
         return res.status(403).json({
-          error: `На безкоштовному тарифі можна мати не більше ${eventLimitFor(creator)} активних заходів${creator?.karma_points < KARMA_EXTRA_EVENT_SLOT ? ` (набери ${KARMA_EXTRA_EVENT_SLOT} карми за реферальну програму для +1)` : ''}. Онови до PRO для необмеженої кількості.`,
+          error: `На безкоштовному тарифі можна мати не більше ${eventLimitFor(creator)} активних заходів${creator?.wave_points < WAVE_EXTRA_EVENT_SLOT ? ` (набери ${waveText(WAVE_EXTRA_EVENT_SLOT)} за реферальну програму для +1)` : ''}. Онови до PRO для необмеженої кількості.`,
           code: 'FREE_EVENT_LIMIT',
         })
       }
@@ -2678,7 +2696,7 @@ app.post('/events/:id/photos', requireAuth, async (req, res) => {
   const [{ count }, { data: uploader }] = await Promise.all([
     supabase.from('event_photos').select('id', { count: 'exact', head: true })
       .eq('event_id', req.params.id).eq('user_id', req.auth.sub),
-    supabase.from('users').select('karma_points').eq('id', req.auth.sub).single(),
+    supabase.from('users').select('wave_points').eq('id', req.auth.sub).single(),
   ])
   const galleryLimit = galleryLimitFor(uploader)
   if ((count ?? 0) >= galleryLimit) {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History, ShieldEllipsis, MapPin, Repeat, Gift, Copy, Check } from 'lucide-react'
+import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History, ShieldEllipsis, MapPin, Repeat, Gift, Copy, Check, Gem } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/EventCard.jsx'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
@@ -12,13 +12,22 @@ import TopupSheet from '../components/TopupSheet.jsx'
 import VerificationSheet from '../components/VerificationSheet.jsx'
 import { PRO_PRICE_STARS, payInvoice } from '../lib/payments.js'
 
-const KARMA_REFERRAL_REWARD = 10
-const KARMA_TIERS = [
+const WAVE_REFERRAL_REWARD = 10
+const WAVE_TIERS = [
   { threshold: 50, label: 'Бейдж «Активний запрошувач» в профілі' },
   { threshold: 100, label: '+1 фото в галереї заходу' },
   { threshold: 150, label: '+1 активний захід одночасно' },
   { threshold: 200, label: '+1 клуб понад безкоштовний мінімум' },
 ]
+
+// Українське відмінювання лічильника: 1 хвиля, 2-4 хвилі, 5+ хвиль.
+function waveNoun(n) {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return 'хвиля'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'хвилі'
+  return 'хвиль'
+}
 
 function shareApp() {
   shareViaTelegram(
@@ -108,7 +117,7 @@ export default function ProfileScreen() {
   function shareReferralLink() {
     shareViaTelegram(
       appLink(`ref_${user.id}`),
-      `Приєднуйся до ЛовиМить! Коли ти реально відвідаєш свій перший захід, ми обидва отримаємо по ${KARMA_REFERRAL_REWARD} карми`,
+      `Приєднуйся до ЛовиМить! Коли ти реально відвідаєш свій перший захід, ми обидва отримаємо по ${WAVE_REFERRAL_REWARD} ${waveNoun(WAVE_REFERRAL_REWARD)}`,
     )
   }
 
@@ -276,29 +285,49 @@ export default function ProfileScreen() {
       </div>
 
       <div className="card" style={{ margin: '12px 16px 0', padding: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <Gift size={16} color="var(--accent)" />
-          <span style={{ fontWeight: 700, fontSize: 14 }}>Запроси друга</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Gift size={16} color="var(--accent)" />
+            <span style={{ fontWeight: 700, fontSize: 14 }}>Запроси друга</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontWeight: 800, fontSize: 15, color: 'var(--blue)' }}>
+            <Gem size={16} fill="var(--blue)" /> {user.wave_points ?? 0}
+          </div>
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 10 }}>
-          Друг реєструється за твоїм лінком — і коли він реально відвідає захід (і організатор підтвердить це після заходу), ви обидва отримуєте по {KARMA_REFERRAL_REWARD} карми.
+          Друг реєструється за твоїм лінком — і коли він реально відвідає захід (і організатор підтвердить це після заходу), ви обидва отримуєте по {WAVE_REFERRAL_REWARD} {waveNoun(WAVE_REFERRAL_REWARD)}.
         </div>
-        {referralStats && (
-          <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
-            Запрошено: {referralStats.referred_count} · Карма з рефералів: {referralStats.karma_earned}
-          </div>
-        )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
-          {KARMA_TIERS.map(({ threshold, label }) => {
-            const unlocked = (user.karma_points ?? 0) >= threshold
+          {WAVE_TIERS.map(({ threshold, label }) => {
+            const unlocked = (user.wave_points ?? 0) >= threshold
             return (
               <div key={threshold} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: unlocked ? 'var(--text-1)' : 'var(--text-3)' }}>
-                {unlocked ? <Check size={12} color="var(--accent)" /> : <span style={{ width: 12, textAlign: 'center' }}>·</span>}
-                <span>{threshold} карми — {label}</span>
+                {unlocked ? <Check size={12} color="var(--blue)" /> : <span style={{ width: 12, textAlign: 'center' }}>·</span>}
+                <span>{threshold} {waveNoun(threshold)} — {label}</span>
               </div>
             )
           })}
         </div>
+        {referralStats && referralStats.referrals.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+              Запрошено: {referralStats.referred_count} · Отримано: {referralStats.waves_earned} {waveNoun(referralStats.waves_earned)}
+            </div>
+            {referralStats.referrals.map(r => (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Avatar name={r.first_name} url={r.avatar_url} size={28} />
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{r.first_name}</span>
+                {r.rewarded ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: 'var(--blue)' }}>
+                    <Gem size={12} /> +{WAVE_REFERRAL_REWARD}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 12, color: 'var(--text-3)' }}>ще не відвідав захід</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             className="btn btn-ghost"
@@ -356,7 +385,7 @@ export default function ProfileScreen() {
             <Sparkles size={18} /> Спробуй PRO
           </div>
           <div style={{ fontSize: 13, opacity: .9, marginBottom: 12 }}>
-            Пріоритет на карті та необмежена кількість активних заходів (безкоштовно — до {(user.karma_points ?? 0) >= 150 ? 3 : 2})
+            Пріоритет на карті та необмежена кількість активних заходів (безкоштовно — до {(user.wave_points ?? 0) >= 150 ? 3 : 2})
           </div>
           {proError && (
             <div style={{ fontSize: 12, marginBottom: 10, background: 'rgba(0,0,0,.15)', borderRadius: 8, padding: '6px 10px' }}>{proError}</div>
