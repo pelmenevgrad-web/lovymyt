@@ -89,6 +89,13 @@ export default function LocationSearchPicker({
     mapRef.current?.flyTo([place.lat, place.lng], 17)
   }
 
+  // Drop the selected-place marker once the pin moves away from where that
+  // place was found — otherwise it's left floating at its old spot, no
+  // longer connected to the freshly-fetched list for the new location.
+  useEffect(() => {
+    setSelectedPlace(null)
+  }, [lat.toFixed(4), lng.toFixed(4)])
+
   useEffect(() => {
     const query = (addressText || '').trim()
     if (query.length < 3) {

@@ -13,11 +13,16 @@ export default function NearbyPlacesList({ lat, lng, onSelect, selectedId }) {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    let cancelled = false
     setPlaces(null)
     setError(null)
     fetchNearbyPlaces(lat, lng)
-      .then(setPlaces)
-      .catch(err => setError(err.message))
+      .then(data => { if (!cancelled) setPlaces(data) })
+      .catch(err => { if (!cancelled) setError(err.message) })
+    // Cancelled if lat/lng change again before the (sequential, ~1.1s+)
+    // Nominatim calls resolve — otherwise a slow older request could land
+    // after a newer one and overwrite the list with stale-location data.
+    return () => { cancelled = true }
     // Rounded so dragging a picker pin by a pixel doesn't refire two
     // sequential Nominatim calls.
   }, [lat.toFixed(4), lng.toFixed(4)])
