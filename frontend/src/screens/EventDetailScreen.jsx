@@ -14,6 +14,7 @@ import { Avatar, AvatarStack, CategoryBadges } from '../components/EventCard.jsx
 import BackButton from '../components/BackButton.jsx'
 import NearbyPlacesList from '../components/NearbyPlacesList.jsx'
 import CheckinQrSheet, { CheckedInBadge } from '../components/CheckinQrSheet.jsx'
+import WeatherBadge from '../components/WeatherBadge.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
@@ -551,7 +552,12 @@ export default function EventDetailScreen() {
 
         {/* Key facts */}
         <div className="card" style={{ padding: '4px 14px', marginBottom: 16 }}>
-          <ConditionRow Icon={Clock}>{formatDateTime(event.start_time)}</ConditionRow>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <ConditionRow Icon={Clock}>{formatDateTime(event.start_time)}</ConditionRow>
+            </div>
+            {!isEnded && <WeatherBadge lat={event.lat} lng={event.lng} startTime={event.start_time} />}
+          </div>
           {event.end_time && (
             <ConditionRow Icon={Clock}>
               Тривалість: {event.duration_min_hours ? `${event.duration_min_hours}–` : 'до '}
