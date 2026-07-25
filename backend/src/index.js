@@ -54,7 +54,26 @@ const PRO_PRICE_STARS = 300
 const PRO_DURATION_DAYS = 30
 const STARS_TOPUP_PACKAGES = [100, 300, 750]
 const FREE_ACTIVE_EVENTS_LIMIT = 2
-const REFERRAL_REWARD_STARS = 15
+const FREE_CLUB_LIMIT = 1
+
+// Карма — окрема від Stars шкала прогресу за реферальну програму. На
+// відміну від Stars (реальні гроші), карма ні на що не обмінюється і
+// тільки відкриває пороги можливостей нижче — тому фармити її фейковими
+// акаунтами немає сенсу.
+const KARMA_REFERRAL_REWARD = 10
+const KARMA_EXTRA_GALLERY_PHOTO = 100
+const KARMA_EXTRA_EVENT_SLOT = 150
+const KARMA_EXTRA_CLUB_SLOT = 200
+
+function galleryLimitFor(user) {
+  return MAX_GALLERY_PHOTOS_PER_USER + (user?.karma_points >= KARMA_EXTRA_GALLERY_PHOTO ? 1 : 0)
+}
+function eventLimitFor(user) {
+  return FREE_ACTIVE_EVENTS_LIMIT + (user?.karma_points >= KARMA_EXTRA_EVENT_SLOT ? 1 : 0)
+}
+function clubLimitFor(user) {
+  return FREE_CLUB_LIMIT + (user?.karma_points >= KARMA_EXTRA_CLUB_SLOT ? 1 : 0)
+}
 
 // Venue-ad tiers (radius = how far a venue shows up from the point an
 // organizer picks while creating an event; premium always sorts first
@@ -397,11 +416,11 @@ app.post('/auth/telegram', async (req, res) => {
   res.json({ token, user: { ...user, ...(await computeUserStats(user.id)) } })
 })
 
-// Credits both sides of a referral the first time the referred user takes a
-// real action (joins or creates an event) — not on signup alone, to avoid
-// paying out for accounts that never actually engage. Guarded update makes
-// this safe to call from both /events/:id/join and POST /events without
-// double-crediting if both somehow race.
+// Credits both sides of a referral the first time the referred user's
+// attendance at an event is confirmed by its organizer (see the no-shows
+// endpoint below) — not on signup, join, or event creation, all of which are
+// too easy to fake with throwaway accounts. Guarded update means this is
+// safe to call once per attendee per completed event without double-crediting.
 async function maybeRewardReferral(userId) {
   const { data: user } = await supabase.from('users').select('referred_by, referral_reward_claimed').eq('id', userId).single()
   if (!user?.referred_by || user.referral_reward_claimed) return
@@ -415,8 +434,8 @@ async function maybeRewardReferral(userId) {
     .maybeSingle()
   if (!claimed) return
 
-  await supabase.rpc('credit_stars_balance', { p_user_id: claimed.referred_by, p_amount: REFERRAL_REWARD_STARS })
-  await supabase.rpc('credit_stars_balance', { p_user_id: userId, p_amount: REFERRAL_REWARD_STARS })
+  await supabase.rpc('credit_karma_balance', { p_user_id: claimed.referred_by, p_amount: KARMA_REFERRAL_REWARD })
+  await supabase.rpc('credit_karma_balance', { p_user_id: userId, p_amount: KARMA_REFERRAL_REWARD })
 }
 
 app.get('/referrals/stats', requireAuth, async (req, res) => {
@@ -428,7 +447,7 @@ app.get('/referrals/stats', requireAuth, async (req, res) => {
   res.json({
     referred_count: referred_count ?? 0,
     rewarded_count: rewarded_count ?? 0,
-    stars_earned: (rewarded_count ?? 0) * REFERRAL_REWARD_STARS,
+    karma_earned: (rewarded_count ?? 0) * KARMA_REFERRAL_REWARD,
   })
 })
 
@@ -964,6 +983,18 @@ app.post('/clubs', requireAuth, async (req, res) => {
   }
   if (weekday != null && (!Number.isInteger(Number(weekday)) || weekday < 0 || weekday > 6)) {
     return res.status(400).json({ error: 'weekday must be 0-6' })
+  }
+
+  const [{ count: existingClubs }, { data: owner }] = await Promise.all([
+    supabase.from('clubs').select('id', { count: 'exact', head: true }).eq('creator_id', req.auth.sub),
+    supabase.from('users').select('karma_points').eq('id', req.auth.sub).single(),
+  ])
+  const clubLimit = clubLimitFor(owner)
+  if ((existingClubs ?? 0) >= clubLimit) {
+    return res.status(403).json({
+      error: `Можна створити не більше ${clubLimit} клуб(ів)${owner?.karma_points < KARMA_EXTRA_CLUB_SLOT ? ` (набери ${KARMA_EXTRA_CLUB_SLOT} карми за реферальну програму для +1)` : ''}.`,
+      code: 'FREE_CLUB_LIMIT',
+    })
   }
 
   try {
@@ -1575,7 +1606,7 @@ app.post('/events', requireAuth, async (req, res) => {
 
   const { data: creator } = await supabase
     .from('users')
-    .select('is_pro, pro_expires_at')
+    .select('is_pro, pro_expires_at, karma_points')
     .eq('id', req.auth.sub)
     .single()
 
@@ -1588,7 +1619,7 @@ app.post('/events', requireAuth, async (req, res) => {
     const { data: newId, error } = await supabase.rpc('create_event_atomic', {
       p_creator_id: req.auth.sub,
       p_is_pro: isProActive(creator ?? {}),
-      p_free_limit: FREE_ACTIVE_EVENTS_LIMIT,
+      p_free_limit: eventLimitFor(creator),
       p_category_id: categoryIds[0], p_title: title.trim(), p_description: description?.trim() || null,
       p_address_text: address_text.trim(),
       p_start_time: start_time, p_lat: lat, p_lng: lng,
@@ -1608,7 +1639,7 @@ app.post('/events', requireAuth, async (req, res) => {
     if (error) {
       if (error.message?.includes('event_limit_reached')) {
         return res.status(403).json({
-          error: `На безкоштовному тарифі можна мати не більше ${FREE_ACTIVE_EVENTS_LIMIT} активних заходів. Онови до PRO для необмеженої кількості.`,
+          error: `На безкоштовному тарифі можна мати не більше ${eventLimitFor(creator)} активних заходів${creator?.karma_points < KARMA_EXTRA_EVENT_SLOT ? ` (набери ${KARMA_EXTRA_EVENT_SLOT} карми за реферальну програму для +1)` : ''}. Онови до PRO для необмеженої кількості.`,
           code: 'FREE_EVENT_LIMIT',
         })
       }
@@ -1637,7 +1668,6 @@ app.post('/events', requireAuth, async (req, res) => {
         `event_${newId}`, 'Переглянути захід',
       ).catch(() => {})
     }
-    maybeRewardReferral(req.auth.sub).catch(() => {})
 
     res.status(201).json({ event: shaped })
   } catch (err) {
@@ -2050,8 +2080,6 @@ app.post('/events/:id/join', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to join event' })
   }
 
-  maybeRewardReferral(req.auth.sub).catch(() => {})
-
   if (data.status === 'waitlisted') {
     const { count: aheadCount } = await supabase
       .from('event_participants')
@@ -2373,6 +2401,21 @@ app.post('/events/:id/no-shows', requireAuth, async (req, res) => {
     }
   }
 
+  // This is the only point a referral reward can be earned: the organizer
+  // just confirmed who actually showed up, so anyone accepted and not on the
+  // no-show list genuinely attended in person.
+  const { data: attendees } = await supabase
+    .from('event_participants')
+    .select('user_id')
+    .eq('event_id', req.params.id)
+    .eq('status', 'accepted')
+  const noShowSet = new Set(userIds)
+  for (const { user_id } of attendees ?? []) {
+    if (!noShowSet.has(user_id)) {
+      maybeRewardReferral(user_id).catch(() => {})
+    }
+  }
+
   res.json({ ok: true })
 })
 
@@ -2632,13 +2675,14 @@ app.post('/events/:id/photos', requireAuth, async (req, res) => {
   const allowed = await canAccessChat(req.params.id, req.auth.sub)
   if (!allowed) return res.status(403).json({ error: 'Доступно тільки учасникам заходу' })
 
-  const { count } = await supabase
-    .from('event_photos')
-    .select('id', { count: 'exact', head: true })
-    .eq('event_id', req.params.id)
-    .eq('user_id', req.auth.sub)
-  if ((count ?? 0) >= MAX_GALLERY_PHOTOS_PER_USER) {
-    return res.status(400).json({ error: `Максимум ${MAX_GALLERY_PHOTOS_PER_USER} фото від одного учасника` })
+  const [{ count }, { data: uploader }] = await Promise.all([
+    supabase.from('event_photos').select('id', { count: 'exact', head: true })
+      .eq('event_id', req.params.id).eq('user_id', req.auth.sub),
+    supabase.from('users').select('karma_points').eq('id', req.auth.sub).single(),
+  ])
+  const galleryLimit = galleryLimitFor(uploader)
+  if ((count ?? 0) >= galleryLimit) {
+    return res.status(400).json({ error: `Максимум ${galleryLimit} фото від одного учасника` })
   }
 
   try {

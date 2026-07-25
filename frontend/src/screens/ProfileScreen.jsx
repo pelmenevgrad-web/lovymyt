@@ -12,7 +12,13 @@ import TopupSheet from '../components/TopupSheet.jsx'
 import VerificationSheet from '../components/VerificationSheet.jsx'
 import { PRO_PRICE_STARS, payInvoice } from '../lib/payments.js'
 
-const REFERRAL_REWARD_STARS = 15
+const KARMA_REFERRAL_REWARD = 10
+const KARMA_TIERS = [
+  { threshold: 50, label: 'Бейдж «Активний запрошувач» в профілі' },
+  { threshold: 100, label: '+1 фото в галереї заходу' },
+  { threshold: 150, label: '+1 активний захід одночасно' },
+  { threshold: 200, label: '+1 клуб понад безкоштовний мінімум' },
+]
 
 function shareApp() {
   shareViaTelegram(
@@ -102,7 +108,7 @@ export default function ProfileScreen() {
   function shareReferralLink() {
     shareViaTelegram(
       appLink(`ref_${user.id}`),
-      `Приєднуйся до ЛовиМить! За реєстрацію по цьому запрошенню ми обидва отримаємо по ${REFERRAL_REWARD_STARS}⭐`,
+      `Приєднуйся до ЛовиМить! Коли ти реально відвідаєш свій перший захід, ми обидва отримаємо по ${KARMA_REFERRAL_REWARD} карми`,
     )
   }
 
@@ -275,13 +281,24 @@ export default function ProfileScreen() {
           <span style={{ fontWeight: 700, fontSize: 14 }}>Запроси друга</span>
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 10 }}>
-          Друг реєструється за твоїм лінком — і ви обидва отримуєте по {REFERRAL_REWARD_STARS}⭐, щойно він приєднається до заходу або створить свій.
+          Друг реєструється за твоїм лінком — і коли він реально відвідає захід (і організатор підтвердить це після заходу), ви обидва отримуєте по {KARMA_REFERRAL_REWARD} карми.
         </div>
         {referralStats && (
           <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
-            Запрошено: {referralStats.referred_count} · Зароблено: {referralStats.stars_earned}⭐
+            Запрошено: {referralStats.referred_count} · Карма з рефералів: {referralStats.karma_earned}
           </div>
         )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
+          {KARMA_TIERS.map(({ threshold, label }) => {
+            const unlocked = (user.karma_points ?? 0) >= threshold
+            return (
+              <div key={threshold} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: unlocked ? 'var(--text-1)' : 'var(--text-3)' }}>
+                {unlocked ? <Check size={12} color="var(--accent)" /> : <span style={{ width: 12, textAlign: 'center' }}>·</span>}
+                <span>{threshold} карми — {label}</span>
+              </div>
+            )
+          })}
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             className="btn btn-ghost"
@@ -339,7 +356,7 @@ export default function ProfileScreen() {
             <Sparkles size={18} /> Спробуй PRO
           </div>
           <div style={{ fontSize: 13, opacity: .9, marginBottom: 12 }}>
-            Пріоритет на карті та необмежена кількість активних заходів (безкоштовно — до 2)
+            Пріоритет на карті та необмежена кількість активних заходів (безкоштовно — до {(user.karma_points ?? 0) >= 150 ? 3 : 2})
           </div>
           {proError && (
             <div style={{ fontSize: 12, marginBottom: 10, background: 'rgba(0,0,0,.15)', borderRadius: 8, padding: '6px 10px' }}>{proError}</div>
