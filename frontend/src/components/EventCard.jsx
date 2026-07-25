@@ -1,4 +1,4 @@
-import { BadgeCheck, Zap, Clock, MapPin, Star, Lock } from 'lucide-react'
+import { BadgeCheck, Zap, Clock, MapPin, Star, Lock, Repeat } from 'lucide-react'
 import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
 import { formatCountdown } from '../lib/format.js'
@@ -111,6 +111,11 @@ export default function EventCard({ event, onClick, compact = false }) {
             <span className="badge" style={{ background: status.bg, color: status.color }}>
               {event.status === 'active' && '● '}{status.label}
             </span>
+            {event.club_id && (
+              <span className="badge" style={{ background: 'var(--accent-light)', color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                <Repeat size={11} /> Клуб
+              </span>
+            )}
             {event.status === 'active' && event.late_join_allowed && (
               <span className="badge" style={{ background: 'var(--green-light)', color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                 <Zap size={11} /> Можна приєднатися

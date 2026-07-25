@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
-  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX, Star, Lock,
+  Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX, Star, Lock, Repeat,
 } from 'lucide-react'
 import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
@@ -356,6 +356,15 @@ export default function EventDetailScreen() {
           <span className="badge" style={{ background: statusMeta.bg, color: statusMeta.color }}>
             {event.status === 'active' && '● '}{statusMeta.label}
           </span>
+          {event.club_id && (
+            <span
+              className="badge"
+              style={{ background: 'var(--accent-light)', color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}
+              onClick={() => navigate(`/clubs/${event.club_id}`)}
+            >
+              <Repeat size={11} /> Клуб
+            </span>
+          )}
           {event.status === 'active' && event.late_join_allowed && (
             <span className="badge" style={{ background: 'var(--green-light)', color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
               <Zap size={11} /> Можна приєднатися
