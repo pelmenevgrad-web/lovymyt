@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { io } from 'socket.io-client'
-import { Send, Loader2, AlertTriangle, Camera, X } from 'lucide-react'
+import { Send, Loader2, AlertTriangle, Camera, X, Navigation } from 'lucide-react'
 import { Avatar } from '../components/EventCard.jsx'
 import BackButton from '../components/BackButton.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -21,6 +21,8 @@ export default function EventChatScreen() {
   const [text, setText] = useState('')
   const [imagePreview, setImagePreview] = useState(null)
   const [sending, setSending] = useState(false)
+  const [locating, setLocating] = useState(false)
+  const [onWayCooldown, setOnWayCooldown] = useState(0)
   const listRef = useRef(null)
   const socketRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -86,6 +88,45 @@ export default function EventChatScreen() {
     } finally {
       setSending(false)
     }
+  }
+
+  // Not real Telegram live location — a Mini App can't trigger that, and
+  // this chat isn't a real Telegram chat anyway. Just a one-off distance
+  // ping via the browser's geolocation API (same one Leaflet already uses
+  // successfully for "locate me" on the map), postable again after a short
+  // client-side cooldown so a nervous tapper doesn't spam the chat.
+  useEffect(() => {
+    if (onWayCooldown <= 0) return
+    const timer = setInterval(() => setOnWayCooldown(s => Math.max(0, s - 1)), 1000)
+    return () => clearInterval(timer)
+  }, [onWayCooldown])
+
+  function handleOnMyWay() {
+    if (locating || onWayCooldown > 0) return
+    if (!navigator.geolocation) {
+      setErrorMsg('Геолокація недоступна в цьому браузері')
+      return
+    }
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          await apiFetch(`/events/${id}/on-my-way`, {
+            method: 'POST',
+            body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          })
+          setOnWayCooldown(60)
+        } catch (err) {
+          setErrorMsg(err.message)
+        } finally {
+          setLocating(false)
+        }
+      },
+      () => {
+        setErrorMsg('Не вдалося визначити місцезнаходження — дозволь доступ до геолокації')
+        setLocating(false)
+      },
+    )
   }
 
   if (status === 'pending') {
@@ -209,6 +250,19 @@ export default function EventChatScreen() {
           }}
         >
           <Camera size={18} />
+        </button>
+        <button
+          onClick={handleOnMyWay}
+          disabled={locating || onWayCooldown > 0}
+          title="Я в дорозі"
+          style={{
+            width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+            background: 'var(--card)', border: '1.5px solid var(--border)', color: 'var(--text)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            opacity: locating || onWayCooldown > 0 ? .5 : 1, fontSize: 10, fontWeight: 700,
+          }}
+        >
+          {locating ? <Loader2 size={16} className="spin" /> : onWayCooldown > 0 ? onWayCooldown : <Navigation size={18} />}
         </button>
         <input
           type="text"

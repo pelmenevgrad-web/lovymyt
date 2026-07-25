@@ -2434,6 +2434,36 @@ app.post('/events/:id/chat/messages', requireAuth, async (req, res) => {
   }
 })
 
+// "Я в дорозі" — not real Telegram live location (a Mini App can't trigger
+// that, and this chat isn't a real Telegram chat anyway), just a one-off
+// distance ping the participant sends manually, posted as a system message.
+app.post('/events/:id/on-my-way', requireAuth, async (req, res) => {
+  const allowed = await canAccessChat(req.params.id, req.auth.sub)
+  if (!allowed) {
+    return res.status(403).json({ error: 'Доступно тільки учасникам заходу' })
+  }
+
+  const lat = Number(req.body?.lat)
+  const lng = Number(req.body?.lng)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ error: 'lat/lng required' })
+  }
+
+  const { data: event, error: eventErr } = await supabase
+    .from('events').select('lat, lng').eq('id', req.params.id).single()
+  if (eventErr || !event) {
+    return res.status(404).json({ error: 'Event not found' })
+  }
+  const { data: me } = await supabase.from('users').select('first_name').eq('id', req.auth.sub).single()
+
+  const distance_km = Math.round(haversineKm(lat, lng, event.lat, event.lng) * 10) / 10
+  const text = `🚗 ${me?.first_name ?? 'Учасник'} в дорозі — залишилось ~${distance_km} км`
+  postSystemMessage(req.params.id, text)
+  notifyEventPeople(req.params.id, req.auth.sub, () => text).catch(() => {})
+
+  res.json({ ok: true, distance_km })
+})
+
 const EVENT_REPORT_SELECT = 'id, text, image_url, created_at, author:users(id, first_name, avatar_url)'
 
 // Recap feed for a finished event — public read (anyone can browse a past
