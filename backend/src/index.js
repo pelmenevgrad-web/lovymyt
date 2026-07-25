@@ -1836,15 +1836,17 @@ app.get('/events/:id', async (req, res) => {
 
   const auth = tryAuth(req)
   let myStatus = null
+  let myCheckedInAt = null
   let waitlistPosition = null
   if (auth) {
     const { data: participant } = await supabase
       .from('event_participants')
-      .select('status, joined_at')
+      .select('status, joined_at, checked_in_at')
       .eq('event_id', req.params.id)
       .eq('user_id', auth.sub)
       .maybeSingle()
     myStatus = participant?.status ?? null
+    myCheckedInAt = participant?.checked_in_at ?? null
 
     if (myStatus === 'waitlisted') {
       const { count: aheadCount } = await supabase
@@ -1864,6 +1866,7 @@ app.get('/events/:id', async (req, res) => {
       min_participants: data.min_participants,
       is_creator: auth?.sub === data.creator_id,
       my_status: myStatus,
+      my_checked_in_at: myCheckedInAt,
       waitlist_position: waitlistPosition,
     },
   })
@@ -2034,7 +2037,7 @@ app.get('/events/:id/participants', async (req, res) => {
 
   const { data: accepted, error: participantsErr } = await supabase
     .from('event_participants')
-    .select('user:users(id, first_name, avatar_url)')
+    .select('checked_in_at, user:users(id, first_name, avatar_url)')
     .eq('event_id', req.params.id)
     .eq('status', 'accepted')
 
@@ -2044,13 +2047,70 @@ app.get('/events/:id/participants', async (req, res) => {
   }
 
   const seen = new Set()
-  const people = [event.creator, ...accepted.map(p => p.user)].filter(person => {
+  const people = [event.creator, ...accepted.map(p => p.user && { ...p.user, checked_in_at: p.checked_in_at })].filter(person => {
     if (!person || seen.has(person.id)) return false
     seen.add(person.id)
     return true
   })
 
   res.json({ participants: people, creator_id: event.creator_id })
+})
+
+// QR check-in: an accepted participant gets a short-lived signed token to show
+// as a QR code, the organizer scans it (via Telegram's native scanner) to mark
+// them present. First use of a purpose-scoped JWT distinct from the 30-day
+// login token, so `type` and `event_id` are re-checked on the receiving end.
+app.get('/events/:id/checkin-token', requireAuth, async (req, res) => {
+  const { data: event } = await supabase.from('events').select('status').eq('id', req.params.id).single()
+  if (!event) return res.status(404).json({ error: 'Event not found' })
+  if (event.status !== 'active') {
+    return res.status(400).json({ error: 'Чек-ін доступний тільки під час заходу' })
+  }
+
+  const { data: participant } = await supabase
+    .from('event_participants')
+    .select('status')
+    .eq('event_id', req.params.id)
+    .eq('user_id', req.auth.sub)
+    .maybeSingle()
+  if (participant?.status !== 'accepted') {
+    return res.status(403).json({ error: 'Доступно тільки учасникам заходу' })
+  }
+
+  const token = jwt.sign({ type: 'checkin', event_id: req.params.id, user_id: req.auth.sub }, JWT_SECRET, { expiresIn: '3m' })
+  res.json({ token })
+})
+
+app.post('/events/:id/checkin', requireAuth, async (req, res) => {
+  const { data: event } = await supabase.from('events').select('creator_id').eq('id', req.params.id).single()
+  if (!event) return res.status(404).json({ error: 'Event not found' })
+  if (event.creator_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки організатор може відмічати учасників' })
+  }
+
+  let decoded
+  try {
+    decoded = jwt.verify(req.body?.token ?? '', JWT_SECRET)
+  } catch {
+    return res.status(400).json({ error: 'QR прострочений — попроси учасника оновити' })
+  }
+  if (decoded.type !== 'checkin' || decoded.event_id !== req.params.id) {
+    return res.status(400).json({ error: 'Невірний QR-код' })
+  }
+
+  const { data: participant } = await supabase
+    .from('event_participants')
+    .select('id, checked_in_at, user:users(first_name)')
+    .eq('event_id', req.params.id)
+    .eq('user_id', decoded.user_id)
+    .eq('status', 'accepted')
+    .maybeSingle()
+  if (!participant) return res.status(404).json({ error: 'Учасника не знайдено' })
+  if (participant.checked_in_at) return res.status(400).json({ error: 'Вже відмічений(а)' })
+
+  const checked_in_at = new Date().toISOString()
+  await supabase.from('event_participants').update({ checked_in_at }).eq('id', participant.id)
+  res.json({ first_name: participant.user?.first_name ?? 'Учасник', checked_in_at })
 })
 
 // Organizer removes an accepted participant, with a reason shown to them

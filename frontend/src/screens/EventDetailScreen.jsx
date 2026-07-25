@@ -6,13 +6,14 @@ import WebApp from '@twa-dev/sdk'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
   Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX, Star, Lock, Repeat,
-  Fuel,
+  Fuel, CheckCircle2, QrCode, ScanLine,
 } from 'lucide-react'
 import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
 import { Avatar, AvatarStack, CategoryBadges } from '../components/EventCard.jsx'
 import BackButton from '../components/BackButton.jsx'
 import NearbyPlacesList from '../components/NearbyPlacesList.jsx'
+import CheckinQrSheet, { CheckedInBadge } from '../components/CheckinQrSheet.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
@@ -178,6 +179,9 @@ function ParticipantRow({ person, isCreator, canManage, onDecline }) {
           {isCreator && (
             <span className="badge" style={{ background: 'var(--accent-light)', color: 'var(--accent)', flexShrink: 0 }}>Організатор</span>
           )}
+          {person.checked_in_at && (
+            <CheckCircle2 size={14} color="var(--green)" style={{ flexShrink: 0 }} />
+          )}
         </div>
         {canManage && !isCreator && (
           <button
@@ -248,11 +252,22 @@ export default function EventDetailScreen() {
   const [cancelError, setCancelError] = useState(null)
   const [continuing, setContinuing] = useState(false)
   const [, forceTick] = useState(0)
+  const [showCheckinSheet, setShowCheckinSheet] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [checkinMsg, setCheckinMsg] = useState(null)
 
   // Keeps the countdown to start ticking without needing a full data refetch
   useEffect(() => {
     const timer = setInterval(() => forceTick(t => t + 1), 30_000)
     return () => clearInterval(timer)
+  }, [])
+
+  // Resets the "scanning" lock if the organizer cancels the native QR popup
+  // without scanning anything — otherwise the scan button stays disabled.
+  useEffect(() => {
+    const onClosed = () => setScanning(false)
+    WebApp.onEvent('scanQrPopupClosed', onClosed)
+    return () => WebApp.offEvent('scanQrPopupClosed', onClosed)
   }, [])
 
   useEffect(() => {
@@ -266,6 +281,29 @@ export default function EventDetailScreen() {
       .then(({ participants }) => setParticipants(participants))
       .catch(err => console.error('[EventDetail] failed to load participants:', err.message))
   }, [id])
+
+  function refreshParticipants() {
+    apiFetch(`/events/${id}/participants`)
+      .then(({ participants }) => setParticipants(participants))
+      .catch(err => console.error('[EventDetail] failed to load participants:', err.message))
+  }
+
+  function handleScanQr() {
+    if (scanning) return
+    setScanning(true)
+    setCheckinMsg(null)
+    WebApp.showScanQrPopup({ text: 'Наведи камеру на QR учасника' }, (token) => {
+      apiFetch(`/events/${id}/checkin`, { method: 'POST', body: JSON.stringify({ token }) })
+        .then(({ first_name }) => {
+          setCheckinMsg({ ok: true, text: `✅ ${first_name} відмічений(а)` })
+          refreshParticipants()
+        })
+        .catch(err => setCheckinMsg({ ok: false, text: err.message }))
+        .finally(() => setScanning(false))
+      WebApp.closeScanQrPopup()
+      return true
+    })
+  }
 
   async function handleDeclineParticipant(userId, reason) {
     try {
@@ -561,6 +599,40 @@ export default function EventDetailScreen() {
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', flexShrink: 0 }}>{pct}%</span>
         </div>
 
+        {/* QR check-in */}
+        {event.status === 'active' && event.is_creator && (
+          <div style={{ marginBottom: 16 }}>
+            <button
+              className="chip"
+              disabled={scanning}
+              onClick={handleScanQr}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: scanning ? .6 : 1 }}
+            >
+              <ScanLine size={14} /> Сканувати QR учасника
+            </button>
+            {checkinMsg && (
+              <div style={{ fontSize: 12, marginTop: 6, color: checkinMsg.ok ? 'var(--green)' : 'var(--red)' }}>
+                {checkinMsg.text}
+              </div>
+            )}
+          </div>
+        )}
+        {event.status === 'active' && !event.is_creator && alreadyJoined && (
+          <div style={{ marginBottom: 16 }}>
+            {event.my_checked_in_at ? (
+              <CheckedInBadge />
+            ) : (
+              <button
+                className="chip"
+                onClick={() => setShowCheckinSheet(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <QrCode size={14} /> Мій QR для входу
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Participants list */}
         {participants.length > 0 && (
           <>
@@ -793,6 +865,10 @@ export default function EventDetailScreen() {
           </button>
         )}
       </div>
+
+      {showCheckinSheet && (
+        <CheckinQrSheet eventId={id} onClose={() => setShowCheckinSheet(false)} />
+      )}
     </div>
   )
 }
