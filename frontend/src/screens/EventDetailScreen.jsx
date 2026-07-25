@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker } from 'react-leaflet'
 import L from 'leaflet'
+import WebApp from '@twa-dev/sdk'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
   Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX, Star, Lock, Repeat,
@@ -24,21 +25,34 @@ const eventPinIcon = L.divIcon({
   iconAnchor: [11, 11],
 })
 
-// Read-only map (no drag/click, unlike LocationSearchPicker) — shown only
-// when the exact address isn't hidden (radius_visibility). Same
-// "nearby fuel/shops" list (via Nominatim, see NearbyPlacesList) as the
-// create-event picker.
+// Shown only when the exact address isn't hidden (radius_visibility).
+// Draggable/zoomable (unlike a locked static preview) so the participant can
+// look around the area, and follows the app's dark/light theme like
+// LocationSearchPicker's map does. Same "nearby fuel/shops" list (via
+// Nominatim, see NearbyPlacesList) as the create-event picker.
 
 function EventMap({ lat, lng }) {
   const [showNearby, setShowNearby] = useState(false)
+  const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark')
+
+  useEffect(() => {
+    const onTheme = () => setIsDark(document.documentElement.getAttribute('data-theme') === 'dark')
+    WebApp.onEvent('themeChanged', onTheme)
+    return () => WebApp.offEvent('themeChanged', onTheme)
+  }, [])
 
   return (
     <div style={{ marginBottom: 16 }}>
       <MapContainer
-        center={[lat, lng]} zoom={14} zoomControl={false} dragging={false} scrollWheelZoom={false} doubleClickZoom={false}
+        center={[lat, lng]} zoom={14} zoomControl={false}
         style={{ height: 160, width: '100%', borderRadius: 'var(--radius-md)' }}
       >
-        <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="" />
+        <TileLayer
+          url={isDark
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
+          attribution=""
+        />
         <Marker position={[lat, lng]} icon={eventPinIcon} />
       </MapContainer>
       <button
