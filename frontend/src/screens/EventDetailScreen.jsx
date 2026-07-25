@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { MapContainer, TileLayer, Marker } from 'react-leaflet'
+import L from 'leaflet'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
   Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX, Star, Lock, Repeat,
+  Fuel, ShoppingCart,
 } from 'lucide-react'
 import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
@@ -12,6 +15,69 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
 import { formatCountdown } from '../lib/format.js'
+import { fetchNearbyPOIs } from '../lib/overpass.js'
+
+const eventPinIcon = L.divIcon({
+  className: '',
+  html: `<div style="width:22px;height:22px;border-radius:50%;background:var(--accent);border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);"></div>`,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+})
+const poiIcon = (kind) => L.divIcon({
+  className: '',
+  html: `<div style="width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid ${kind === 'fuel' ? '#F97316' : '#22C55E'};display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.3);">${kind === 'fuel' ? '⛽' : '🛒'}</div>`,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+})
+
+// Read-only map (no drag/click, unlike LocationSearchPicker) — shown only
+// when the exact address isn't hidden (radius_visibility). Same
+// "show nearby fuel/shops" toggle via Overpass as the create-event picker.
+function EventMap({ lat, lng }) {
+  const [showPOIs, setShowPOIs] = useState(false)
+  const [pois, setPois] = useState([])
+  const [loadingPOIs, setLoadingPOIs] = useState(false)
+  const [poiError, setPoiError] = useState(null)
+
+  useEffect(() => {
+    if (!showPOIs) return
+    setLoadingPOIs(true)
+    setPoiError(null)
+    fetchNearbyPOIs(lat, lng).then(setPois).catch(err => setPoiError(err.message)).finally(() => setLoadingPOIs(false))
+  }, [showPOIs, lat, lng])
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <MapContainer
+        center={[lat, lng]} zoom={14} zoomControl={false} dragging={false} scrollWheelZoom={false} doubleClickZoom={false}
+        style={{ height: 160, width: '100%', borderRadius: 'var(--radius-md)' }}
+      >
+        <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="" />
+        {showPOIs && pois.map(p => <Marker key={p.id} position={[p.lat, p.lng]} icon={poiIcon(p.kind)} />)}
+        <Marker position={[lat, lng]} icon={eventPinIcon} />
+      </MapContainer>
+      <button
+        className="chip"
+        style={{
+          marginTop: 8,
+          background: showPOIs ? 'var(--accent-light)' : 'var(--card)',
+          color: showPOIs ? 'var(--accent)' : 'var(--text)',
+          border: '1.5px solid ' + (showPOIs ? 'var(--accent)' : 'var(--border)'),
+        }}
+        onClick={() => setShowPOIs(v => !v)}
+      >
+        <Fuel size={14} /> <ShoppingCart size={14} />
+        {loadingPOIs ? 'Шукаємо…' : showPOIs ? 'Приховати заправки/магазини' : 'Заправки/магазини поруч'}
+      </button>
+      {showPOIs && poiError && (
+        <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 4 }}>{poiError} — спробуй ще раз пізніше</div>
+      )}
+      {showPOIs && !loadingPOIs && !poiError && pois.length === 0 && (
+        <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>Нічого не знайдено поблизу</div>
+      )}
+    </div>
+  )
+}
 
 function SupplyItem({ supply, userId, onClaim }) {
   const myClaim = supply.claims.find(c => c.user_id === userId)
@@ -470,6 +536,8 @@ export default function EventDetailScreen() {
             </ConditionRow>
           )}
         </div>
+
+        {!event.address_hidden && <EventMap lat={event.lat} lng={event.lng} />}
 
         {/* Participant progress */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>

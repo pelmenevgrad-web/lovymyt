@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
-import { Search } from 'lucide-react'
+import { Search, Fuel, ShoppingCart } from 'lucide-react'
+import { fetchNearbyPOIs } from '../lib/overpass.js'
 
 const pickerIcon = L.divIcon({
   className: '',
@@ -10,7 +11,14 @@ const pickerIcon = L.divIcon({
   iconAnchor: [11, 11],
 })
 
-function MapPicker({ lat, lng, onMapChange, isDark, mapRef }) {
+const poiIcon = (kind) => L.divIcon({
+  className: '',
+  html: `<div style="width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid ${kind === 'fuel' ? '#F97316' : '#22C55E'};display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.3);">${kind === 'fuel' ? '⛽' : '🛒'}</div>`,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+})
+
+function MapPicker({ lat, lng, onMapChange, isDark, mapRef, pois }) {
   function ClickCapture() {
     useMapEvents({ click: (e) => onMapChange(e.latlng.lat, e.latlng.lng) })
     return null
@@ -31,6 +39,9 @@ function MapPicker({ lat, lng, onMapChange, isDark, mapRef }) {
         attribution=""
       />
       <ClickCapture />
+      {pois?.map(p => (
+        <Marker key={p.id} position={[p.lat, p.lng]} icon={poiIcon(p.kind)} />
+      ))}
       <Marker
         position={[lat, lng]}
         icon={pickerIcon}
@@ -69,7 +80,26 @@ export default function LocationSearchPicker({
   const [suggestions, setSuggestions] = useState([])
   const [searching, setSearching] = useState(false)
   const [focused, setFocused] = useState(false)
+  const [showPOIs, setShowPOIs] = useState(false)
+  const [pois, setPois] = useState([])
+  const [loadingPOIs, setLoadingPOIs] = useState(false)
+  const [poiError, setPoiError] = useState(null)
   const mapRef = useRef(null)
+
+  // Fetch (or refetch on move) only while the toggle is on — debounced so
+  // dragging the pin doesn't fire a request per pixel.
+  useEffect(() => {
+    if (!showPOIs) return
+    setLoadingPOIs(true)
+    setPoiError(null)
+    const timer = setTimeout(() => {
+      fetchNearbyPOIs(lat, lng)
+        .then(setPois)
+        .catch(err => setPoiError(err.message))
+        .finally(() => setLoadingPOIs(false))
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [showPOIs, lat, lng])
 
   useEffect(() => {
     const query = (addressText || '').trim()
@@ -155,7 +185,27 @@ export default function LocationSearchPicker({
       </div>
 
       <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>{hint}</div>
-      <MapPicker lat={lat} lng={lng} isDark={isDark} mapRef={mapRef} onMapChange={handleMapChange} />
+      <button
+        type="button"
+        className="chip"
+        style={{
+          marginTop: 8,
+          background: showPOIs ? 'var(--accent-light)' : 'var(--card)',
+          color: showPOIs ? 'var(--accent)' : 'var(--text)',
+          border: '1.5px solid ' + (showPOIs ? 'var(--accent)' : 'var(--border)'),
+        }}
+        onClick={() => setShowPOIs(v => !v)}
+      >
+        <Fuel size={14} /> <ShoppingCart size={14} />
+        {loadingPOIs ? 'Шукаємо…' : showPOIs ? 'Приховати заправки/магазини' : 'Показати заправки/магазини поруч'}
+      </button>
+      {showPOIs && poiError && (
+        <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 4 }}>{poiError} — спробуй ще раз пізніше</div>
+      )}
+      {showPOIs && !loadingPOIs && !poiError && pois.length === 0 && (
+        <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>Нічого не знайдено поблизу</div>
+      )}
+      <MapPicker lat={lat} lng={lng} isDark={isDark} mapRef={mapRef} onMapChange={handleMapChange} pois={showPOIs ? pois : []} />
     </div>
   )
 }
