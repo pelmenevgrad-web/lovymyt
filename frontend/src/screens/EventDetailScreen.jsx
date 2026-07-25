@@ -5,7 +5,7 @@ import L from 'leaflet'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
   Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX, Star, Lock, Repeat,
-  Fuel, ShoppingCart,
+  Fuel,
 } from 'lucide-react'
 import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
@@ -15,7 +15,6 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
 import { formatCountdown } from '../lib/format.js'
-import { fetchNearbyPOIs } from '../lib/overpass.js'
 
 const eventPinIcon = L.divIcon({
   className: '',
@@ -23,37 +22,30 @@ const eventPinIcon = L.divIcon({
   iconSize: [22, 22],
   iconAnchor: [11, 11],
 })
-const poiIcon = (kind) => L.divIcon({
-  className: '',
-  html: `<div style="width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid ${kind === 'fuel' ? '#F97316' : '#22C55E'};display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.3);">${kind === 'fuel' ? '⛽' : '🛒'}</div>`,
-  iconSize: [22, 22],
-  iconAnchor: [11, 11],
-})
 
 // Read-only map (no drag/click, unlike LocationSearchPicker) — shown only
 // when the exact address isn't hidden (radius_visibility). Same
-// "show nearby fuel/shops" toggle via Overpass as the create-event picker.
+// "show nearby fuel/shops" toggle (tile-layer swap) as the create-event picker.
+// The app's usual minimal CartoDB style is deliberately stripped of most POI
+// icons for a clean look. Standard OSM "Carto" tiles already render shops/
+// pharmacies/fuel stations natively — no separate POI API needed, so the
+// toggle just swaps tile layer + zooms in rather than calling anything.
+const STANDARD_OSM_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+
 function EventMap({ lat, lng }) {
   const [showPOIs, setShowPOIs] = useState(false)
-  const [pois, setPois] = useState([])
-  const [loadingPOIs, setLoadingPOIs] = useState(false)
-  const [poiError, setPoiError] = useState(null)
-
-  useEffect(() => {
-    if (!showPOIs) return
-    setLoadingPOIs(true)
-    setPoiError(null)
-    fetchNearbyPOIs(lat, lng).then(setPois).catch(err => setPoiError(err.message)).finally(() => setLoadingPOIs(false))
-  }, [showPOIs, lat, lng])
 
   return (
     <div style={{ marginBottom: 16 }}>
       <MapContainer
-        center={[lat, lng]} zoom={14} zoomControl={false} dragging={false} scrollWheelZoom={false} doubleClickZoom={false}
+        center={[lat, lng]} zoom={showPOIs ? 17 : 14} zoomControl={false} dragging={false} scrollWheelZoom={false} doubleClickZoom={false}
         style={{ height: 160, width: '100%', borderRadius: 'var(--radius-md)' }}
       >
-        <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="" />
-        {showPOIs && pois.map(p => <Marker key={p.id} position={[p.lat, p.lng]} icon={poiIcon(p.kind)} />)}
+        <TileLayer
+          key={showPOIs ? 'osm' : 'light'}
+          url={showPOIs ? STANDARD_OSM_URL : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
+          attribution={showPOIs ? '&copy; OpenStreetMap contributors' : ''}
+        />
         <Marker position={[lat, lng]} icon={eventPinIcon} />
       </MapContainer>
       <button
@@ -66,15 +58,8 @@ function EventMap({ lat, lng }) {
         }}
         onClick={() => setShowPOIs(v => !v)}
       >
-        <Fuel size={14} /> <ShoppingCart size={14} />
-        {loadingPOIs ? 'Шукаємо…' : showPOIs ? 'Приховати заправки/магазини' : 'Заправки/магазини поруч'}
+        <Fuel size={14} /> {showPOIs ? 'Звичайна карта' : 'Заправки/магазини поруч'}
       </button>
-      {showPOIs && poiError && (
-        <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 4 }}>{poiError} — спробуй ще раз пізніше</div>
-      )}
-      {showPOIs && !loadingPOIs && !poiError && pois.length === 0 && (
-        <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>Нічого не знайдено поблизу</div>
-      )}
     </div>
   )
 }

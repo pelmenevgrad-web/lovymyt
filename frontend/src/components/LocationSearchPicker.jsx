@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
-import { Search, Fuel, ShoppingCart } from 'lucide-react'
-import { fetchNearbyPOIs } from '../lib/overpass.js'
+import { Search, Fuel } from 'lucide-react'
 
 const pickerIcon = L.divIcon({
   className: '',
@@ -11,14 +10,14 @@ const pickerIcon = L.divIcon({
   iconAnchor: [11, 11],
 })
 
-const poiIcon = (kind) => L.divIcon({
-  className: '',
-  html: `<div style="width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid ${kind === 'fuel' ? '#F97316' : '#22C55E'};display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.3);">${kind === 'fuel' ? '⛽' : '🛒'}</div>`,
-  iconSize: [22, 22],
-  iconAnchor: [11, 11],
-})
+// The app's usual minimal CartoDB style (Positron/Dark Matter) is deliberately
+// stripped of most POI icons for a clean look. The standard OSM "Carto" tiles
+// already render shops/pharmacies/fuel stations natively — no separate POI
+// API needed, so the "nearby amenities" toggle just swaps tile layer + zooms
+// in rather than calling anything.
+const STANDARD_OSM_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 
-function MapPicker({ lat, lng, onMapChange, isDark, mapRef, pois }) {
+function MapPicker({ lat, lng, onMapChange, isDark, mapRef, showPOIs }) {
   function ClickCapture() {
     useMapEvents({ click: (e) => onMapChange(e.latlng.lat, e.latlng.lng) })
     return null
@@ -28,20 +27,20 @@ function MapPicker({ lat, lng, onMapChange, isDark, mapRef, pois }) {
     <MapContainer
       ref={mapRef}
       center={[lat, lng]}
-      zoom={13}
+      zoom={showPOIs ? 17 : 13}
       style={{ height: 180, width: '100%', borderRadius: 'var(--radius-md)', marginTop: 8 }}
       zoomControl={false}
     >
       <TileLayer
-        url={isDark
-          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
-        attribution=""
+        key={showPOIs ? 'osm' : (isDark ? 'dark' : 'light')}
+        url={showPOIs
+          ? STANDARD_OSM_URL
+          : isDark
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
+        attribution={showPOIs ? '&copy; OpenStreetMap contributors' : ''}
       />
       <ClickCapture />
-      {pois?.map(p => (
-        <Marker key={p.id} position={[p.lat, p.lng]} icon={poiIcon(p.kind)} />
-      ))}
       <Marker
         position={[lat, lng]}
         icon={pickerIcon}
@@ -81,25 +80,7 @@ export default function LocationSearchPicker({
   const [searching, setSearching] = useState(false)
   const [focused, setFocused] = useState(false)
   const [showPOIs, setShowPOIs] = useState(false)
-  const [pois, setPois] = useState([])
-  const [loadingPOIs, setLoadingPOIs] = useState(false)
-  const [poiError, setPoiError] = useState(null)
   const mapRef = useRef(null)
-
-  // Fetch (or refetch on move) only while the toggle is on — debounced so
-  // dragging the pin doesn't fire a request per pixel.
-  useEffect(() => {
-    if (!showPOIs) return
-    setLoadingPOIs(true)
-    setPoiError(null)
-    const timer = setTimeout(() => {
-      fetchNearbyPOIs(lat, lng)
-        .then(setPois)
-        .catch(err => setPoiError(err.message))
-        .finally(() => setLoadingPOIs(false))
-    }, 400)
-    return () => clearTimeout(timer)
-  }, [showPOIs, lat, lng])
 
   useEffect(() => {
     const query = (addressText || '').trim()
@@ -196,16 +177,9 @@ export default function LocationSearchPicker({
         }}
         onClick={() => setShowPOIs(v => !v)}
       >
-        <Fuel size={14} /> <ShoppingCart size={14} />
-        {loadingPOIs ? 'Шукаємо…' : showPOIs ? 'Приховати заправки/магазини' : 'Показати заправки/магазини поруч'}
+        <Fuel size={14} /> {showPOIs ? 'Звичайна карта' : 'Показати заправки/магазини поруч'}
       </button>
-      {showPOIs && poiError && (
-        <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 4 }}>{poiError} — спробуй ще раз пізніше</div>
-      )}
-      {showPOIs && !loadingPOIs && !poiError && pois.length === 0 && (
-        <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>Нічого не знайдено поблизу</div>
-      )}
-      <MapPicker lat={lat} lng={lng} isDark={isDark} mapRef={mapRef} onMapChange={handleMapChange} pois={showPOIs ? pois : []} />
+      <MapPicker lat={lat} lng={lng} isDark={isDark} mapRef={mapRef} onMapChange={handleMapChange} showPOIs={showPOIs} />
     </div>
   )
 }
