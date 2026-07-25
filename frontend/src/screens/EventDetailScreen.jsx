@@ -38,7 +38,7 @@ function EventMap({ lat, lng }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <MapContainer
-        center={[lat, lng]} zoom={showPOIs ? 17 : 14} zoomControl={false} dragging={false} scrollWheelZoom={false} doubleClickZoom={false}
+        center={[lat, lng]} zoom={showPOIs ? 19 : 14} zoomControl={false} dragging={false} scrollWheelZoom={false} doubleClickZoom={false}
         style={{ height: 160, width: '100%', borderRadius: 'var(--radius-md)' }}
       >
         <TileLayer

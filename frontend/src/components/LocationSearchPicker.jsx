@@ -27,7 +27,7 @@ function MapPicker({ lat, lng, onMapChange, isDark, mapRef, showPOIs }) {
     <MapContainer
       ref={mapRef}
       center={[lat, lng]}
-      zoom={showPOIs ? 17 : 13}
+      zoom={showPOIs ? 19 : 13}
       style={{ height: 180, width: '100%', borderRadius: 'var(--radius-md)', marginTop: 8 }}
       zoomControl={false}
     >
