@@ -4,6 +4,7 @@ import WebApp from '@twa-dev/sdk'
 import { Camera, Loader2, Save, Rocket } from 'lucide-react'
 import { apiFetch } from '../lib/api.js'
 import { compressImage } from '../lib/image.js'
+import { resolveIcon } from '../lib/icons.js'
 import BackButton from '../components/BackButton.jsx'
 import LocationSearchPicker from '../components/LocationSearchPicker.jsx'
 
@@ -29,11 +30,18 @@ export default function CreateVenueScreen() {
   const [loadError, setLoadError] = useState(null)
   const [form, setForm] = useState({
     title: '', description: '', address_text: '', lat: INITIAL_LAT, lng: INITIAL_LNG,
-    photo: null, price_info: '',
+    photo: null, price_info: '', category_id: null,
   })
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
+  const [categories, setCategories] = useState([])
   const fileInputRef = useRef(null)
+
+  useEffect(() => {
+    apiFetch('/venue-categories')
+      .then(({ venue_categories }) => setCategories(venue_categories))
+      .catch(err => console.error('[CreateVenue] failed to load categories:', err.message))
+  }, [])
 
   const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark')
   useEffect(() => {
@@ -57,7 +65,7 @@ export default function CreateVenueScreen() {
         setForm({
           title: venue.title, description: venue.description ?? '',
           address_text: venue.address_text, lat: venue.lat, lng: venue.lng,
-          photo: venue.photo_url, price_info: venue.price_info ?? '',
+          photo: venue.photo_url, price_info: venue.price_info ?? '', category_id: venue.category_id ?? null,
         })
       })
       .catch(err => setLoadError(err.message))
@@ -87,7 +95,7 @@ export default function CreateVenueScreen() {
       const body = {
         title: form.title.trim(), description: form.description.trim() || null,
         address_text: form.address_text, lat: form.lat, lng: form.lng,
-        price_info: form.price_info.trim() || null,
+        price_info: form.price_info.trim() || null, category_id: form.category_id,
         // Unchanged photo (already a hosted URL, not edited) is skipped —
         // backend only re-uploads when it looks like a fresh data: URL.
         photo: form.photo?.startsWith('data:') ? form.photo : undefined,
@@ -160,6 +168,29 @@ export default function CreateVenueScreen() {
           type="text" placeholder="Наприклад: Альтанки на озері"
           maxLength={80} value={form.title} onChange={e => set('title', e.target.value)}
         />
+      </Section>
+
+      <Section title="Тип закладу (необов'язково)">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {categories.map(cat => {
+            const active = form.category_id === cat.id
+            const Icon = resolveIcon(cat.icon_name)
+            return (
+              <button
+                key={cat.id}
+                className="chip"
+                onClick={() => set('category_id', active ? null : cat.id)}
+                style={{
+                  background: active ? cat.color : 'var(--card)',
+                  color: active ? '#fff' : 'var(--text)',
+                  border: active ? 'none' : '1.5px solid var(--border)',
+                }}
+              >
+                <Icon size={16} /> {cat.name}
+              </button>
+            )
+          })}
+        </div>
       </Section>
 
       <Section title="Опис (необов'язково)">

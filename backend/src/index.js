@@ -94,11 +94,10 @@ function clubLimitFor(user) {
 // organizer picks while creating an event; premium always sorts first
 // among competing ads in a matching area regardless of distance).
 const VENUE_TIERS = {
-  basic:    { price: 250, days: 14, radius_km: 10 },
-  standard: { price: 450, days: 30, radius_km: 20 },
-  premium:  { price: 800, days: 30, radius_km: 30 },
+  week:  { price: 300, days: 7,  radius_km: 20 },
+  month: { price: 500, days: 30, radius_km: 20 },
 }
-const VENUE_TIER_RANK = { premium: 0, standard: 1, basic: 2 }
+const VENUE_TIER_RANK = { month: 0, week: 1 }
 
 function isProActive(user) {
   return !!user.is_pro && (!user.pro_expires_at || new Date(user.pro_expires_at) > new Date())
@@ -177,7 +176,10 @@ bot.on('message', async (ctx, next) => {
 
     const { error } = await supabase
       .from('venues')
-      .update({ tier: payload.tier, radius_km: tierCfg.radius_km, active_until: newExpiry.toISOString() })
+      .update({
+        tier: payload.tier, radius_km: tierCfg.radius_km, active_until: newExpiry.toISOString(),
+        auto_renew: !!payload.auto_renew,
+      })
       .eq('id', venue.id)
     if (error) return console.error('Activating venue failed:', error.message)
 
@@ -683,7 +685,7 @@ app.post('/pro/subscribe', requireAuth, async (req, res) => {
 // they pick a location while creating an event (GET /venues/nearby).
 
 app.post('/venues', requireAuth, async (req, res) => {
-  const { title, description, address_text, lat, lng, photo, price_info } = req.body ?? {}
+  const { title, description, address_text, lat, lng, photo, price_info, category_id } = req.body ?? {}
   if (!title?.trim() || !address_text?.trim() || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
     return res.status(400).json({ error: 'Missing required fields' })
   }
@@ -698,6 +700,7 @@ app.post('/venues', requireAuth, async (req, res) => {
       .insert({
         owner_id: req.auth.sub, title: title.trim(), description: description?.trim() || null,
         address_text: address_text.trim(), lat: Number(lat), lng: Number(lng), photo_url, price_info: price_info?.trim() || null,
+        category_id: category_id || null,
       })
       .select()
       .single()
@@ -757,6 +760,23 @@ app.get('/venues/nearby', requireAuth, async (req, res) => {
   res.json({ venues: matches })
 })
 
+// All active partner venues with coordinates, for pins on the main map —
+// distinct from /venues/nearby, which is a capped, radius-filtered
+// suggestion list (no coordinates in its response) used while creating an event.
+app.get('/venues', async (_req, res) => {
+  const { data, error } = await supabase
+    .from('venues')
+    .select('id, title, photo_url, lat, lng, tier, category_id')
+    .eq('status', 'approved')
+    .gt('active_until', new Date().toISOString())
+
+  if (error) {
+    console.error('Fetching active venues failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load venues' })
+  }
+  res.json({ venues: data })
+})
+
 app.patch('/venues/:id', requireAuth, async (req, res) => {
   const { data: existing, error: fetchErr } = await supabase
     .from('venues').select('owner_id, status').eq('id', req.params.id).single()
@@ -770,7 +790,7 @@ app.patch('/venues/:id', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Локацію вже підтверджено — редагування недоступне' })
   }
 
-  const { title, description, address_text, lat, lng, photo, price_info } = req.body ?? {}
+  const { title, description, address_text, lat, lng, photo, price_info, category_id } = req.body ?? {}
   if (!title?.trim() || !address_text?.trim() || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
     return res.status(400).json({ error: 'Missing required fields' })
   }
@@ -779,6 +799,7 @@ app.patch('/venues/:id', requireAuth, async (req, res) => {
     const patch = {
       title: title.trim(), description: description?.trim() || null,
       address_text: address_text.trim(), lat: Number(lat), lng: Number(lng), price_info: price_info?.trim() || null,
+      category_id: category_id || null,
     }
     if (photo) {
       patch.photo_url = await uploadImageDataUrl(photo, 'chat-images', `venues/${req.auth.sub}`)
@@ -812,7 +833,7 @@ app.patch('/venues/:id', requireAuth, async (req, res) => {
 })
 
 app.post('/venues/:id/activate', requireAuth, async (req, res) => {
-  const { tier } = req.body ?? {}
+  const { tier, auto_renew } = req.body ?? {}
   const tierCfg = VENUE_TIERS[tier]
   if (!tierCfg) {
     return res.status(400).json({ error: 'Невідомий тариф' })
@@ -834,7 +855,7 @@ app.post('/venues/:id/activate', requireAuth, async (req, res) => {
     const invoiceLink = await bot.telegram.createInvoiceLink({
       title: `Реклама «${venue.title}»`,
       description: `Показ локації протягом ${tierCfg.days} днів у радіусі ${tierCfg.radius_km} км`,
-      payload: JSON.stringify({ type: 'venue_activation', venue_id: req.params.id, tier }),
+      payload: JSON.stringify({ type: 'venue_activation', venue_id: req.params.id, tier, auto_renew: !!auto_renew }),
       provider_token: '',
       currency: 'XTR',
       prices: [{ label: `Реклама локації — ${tier}`, amount: tierCfg.price }],
@@ -846,10 +867,31 @@ app.post('/venues/:id/activate', requireAuth, async (req, res) => {
   }
 })
 
+// Lets the owner turn auto-renew off without waiting for it to fail on
+// insufficient balance — turning it ON only happens via a paid activation
+// (activate above), since that's the one place a tier/price is chosen.
+app.patch('/venues/:id/auto-renew', requireAuth, async (req, res) => {
+  if (req.body?.auto_renew !== false) {
+    return res.status(400).json({ error: 'Only turning auto-renew off is supported here' })
+  }
+  const { data: venue, error: fetchErr } = await supabase.from('venues').select('owner_id').eq('id', req.params.id).single()
+  if (fetchErr) return res.status(404).json({ error: 'Venue not found' })
+  if (venue.owner_id !== req.auth.sub) {
+    return res.status(403).json({ error: 'Тільки власник може змінювати автопродовження' })
+  }
+  const { error } = await supabase.from('venues').update({ auto_renew: false }).eq('id', req.params.id)
+  if (error) return res.status(500).json({ error: 'Failed to update' })
+  res.json({ ok: true })
+})
+
 // Public detail page — anyone can view an approved venue; only the owner
 // (or an admin) can see one that's still pending/rejected.
 app.get('/venues/:id', async (req, res) => {
-  const { data, error } = await supabase.from('venues').select('*').eq('id', req.params.id).single()
+  const { data, error } = await supabase
+    .from('venues')
+    .select('*, category:venue_categories(name, icon_name, color)')
+    .eq('id', req.params.id)
+    .single()
   if (error) {
     return res.status(404).json({ error: 'Venue not found' })
   }
@@ -1199,6 +1241,20 @@ app.get('/categories', async (_req, res) => {
     return res.status(500).json({ error: 'Failed to load categories' })
   }
   res.json({ categories: data })
+})
+
+app.get('/venue-categories', async (_req, res) => {
+  const { data, error } = await supabase
+    .from('venue_categories')
+    .select('id, name, icon_name, color')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+
+  if (error) {
+    console.error('Fetching venue categories failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load venue categories' })
+  }
+  res.json({ venue_categories: data })
 })
 
 // Public list of the funny-status labels reviewers can tag participants with
@@ -3413,6 +3469,46 @@ app.patch('/admin/categories/:id', requireAdmin, async (req, res) => {
   res.json({ category: data })
 })
 
+app.get('/admin/venue-categories', requireAdmin, async (_req, res) => {
+  const { data, error } = await supabase.from('venue_categories').select('*').order('sort_order', { ascending: true })
+  if (error) return res.status(500).json({ error: 'Failed to load venue categories' })
+  res.json({ venue_categories: data })
+})
+
+app.post('/admin/venue-categories', requireAdmin, async (req, res) => {
+  const { name, icon_name, color, sort_order } = req.body ?? {}
+  if (!name?.trim()) {
+    return res.status(400).json({ error: 'name is required' })
+  }
+  const { data, error } = await supabase
+    .from('venue_categories')
+    .insert({ name: name.trim(), icon_name: icon_name || null, color: color || null, sort_order: sort_order || 0 })
+    .select()
+    .single()
+  if (error) {
+    console.error('Creating venue category failed:', error.message)
+    return res.status(500).json({ error: 'Failed to create venue category' })
+  }
+  res.status(201).json({ venue_category: data })
+})
+
+app.patch('/admin/venue-categories/:id', requireAdmin, async (req, res) => {
+  const { name, icon_name, color, sort_order, is_active } = req.body ?? {}
+  const patch = {}
+  if (name !== undefined) patch.name = name.trim()
+  if (icon_name !== undefined) patch.icon_name = icon_name
+  if (color !== undefined) patch.color = color
+  if (sort_order !== undefined) patch.sort_order = sort_order
+  if (is_active !== undefined) patch.is_active = !!is_active
+
+  const { data, error } = await supabase.from('venue_categories').update(patch).eq('id', req.params.id).select().single()
+  if (error) {
+    console.error('Updating venue category failed:', error.message)
+    return res.status(500).json({ error: 'Failed to update venue category' })
+  }
+  res.json({ venue_category: data })
+})
+
 app.get('/admin/funny-statuses', requireAdmin, async (_req, res) => {
   const { data, error } = await supabase.from('funny_statuses').select('*').order('sort_order', { ascending: true })
   if (error) return res.status(500).json({ error: 'Failed to load funny statuses' })
@@ -4027,6 +4123,59 @@ async function sweepBattles() {
   }))
 }
 
+// Auto-renews venue ads out of the owner's own Stars balance — a real
+// Telegram Stars invoice can't be silently re-charged without the owner
+// re-approving each payment in Telegram's own UI, so "auto-renew" only
+// works against Stars they've already topped up in advance.
+async function sweepVenueRenewals() {
+  const { data: candidates, error } = await supabase
+    .from('venues')
+    .select('id, owner_id, title, tier')
+    .eq('auto_renew', true)
+    .eq('status', 'approved')
+    .lt('active_until', new Date().toISOString())
+
+  if (error) return console.error('Venue renewal sweep failed:', error.message)
+  if (!candidates || candidates.length === 0) return
+
+  await Promise.all(candidates.map(async (venue) => {
+    const tierCfg = VENUE_TIERS[venue.tier]
+    if (!tierCfg) return
+
+    const { data: owner } = await supabase.from('users').select('telegram_id').eq('id', venue.owner_id).single()
+
+    const { error: debitErr } = await supabase.rpc('debit_stars_balance', { p_user_id: venue.owner_id, p_amount: tierCfg.price })
+    if (debitErr) {
+      await supabase.from('venues').update({ auto_renew: false }).eq('id', venue.id)
+      notifyUser(
+        owner?.telegram_id,
+        `⚠️ Не вдалося автопродовжити рекламу «${venue.title}» — недостатньо Stars на балансі. Автопродовження вимкнено, поповни баланс і продовж вручну.`,
+        `venue_${venue.id}`, 'Відкрити локацію',
+      ).catch(() => {})
+      return
+    }
+
+    const newExpiry = new Date(Date.now() + tierCfg.days * 86_400_000)
+    const { error: updateErr } = await supabase
+      .from('venues')
+      .update({ active_until: newExpiry.toISOString() })
+      .eq('id', venue.id)
+    if (updateErr) {
+      console.error('Extending venue after renewal debit failed:', updateErr.message)
+      // Debit already went through — refund rather than silently eat the charge.
+      await supabase.rpc('credit_stars_balance', { p_user_id: venue.owner_id, p_amount: tierCfg.price }).catch(() => {})
+      return
+    }
+
+    await supabase.from('stars_transactions').insert({ user_id: venue.owner_id, type: 'venue_activation', amount: tierCfg.price })
+    notifyUser(
+      owner?.telegram_id,
+      `✅ Рекламу «${venue.title}» автоматично продовжено до ${newExpiry.toLocaleDateString('uk-UA')}`,
+      `venue_${venue.id}`, 'Відкрити локацію',
+    ).catch(() => {})
+  }))
+}
+
 async function start() {
   await new Promise((resolve) => httpServer.listen(PORT, resolve))
   console.log(`Backend listening on port ${PORT}`)
@@ -4041,6 +4190,8 @@ async function start() {
   setInterval(sweepExpiredPro, 5 * 60_000)
   sweepBattles()
   setInterval(sweepBattles, 5 * 60_000)
+  sweepVenueRenewals()
+  setInterval(sweepVenueRenewals, 5 * 60_000)
 
   if (WEBHOOK_URL) {
     const webhookEndpoint = `${WEBHOOK_URL}/webhook`

@@ -78,6 +78,7 @@ export default function AdminScreen() {
           <NavRow Icon={Flag} label="Скарги" badge={stats?.pending_user_reports} onClick={() => navigate('/admin/reports')} />
           <NavRow Icon={BadgeCheck} label="Верифікація" badge={stats?.pending_verification_requests} onClick={() => navigate('/admin/verification')} />
           <NavRow Icon={MapPin} label="Локації" badge={stats?.pending_venues} onClick={() => navigate('/admin/venues')} />
+          <NavRow Icon={LayoutGrid} label="Категорії партнерів" onClick={() => navigate('/admin/venue-categories')} />
           <NavRow Icon={Star} label="Stars-платежі" onClick={() => navigate('/admin/stars')} />
           <NavRow Icon={Users} label="Користувачі / бан" onClick={() => navigate('/admin/users')} />
         </div>

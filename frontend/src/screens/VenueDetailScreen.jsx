@@ -4,6 +4,7 @@ import { Loader2, AlertTriangle, MapPin, MessageCircle, Rocket, Pencil, Inbox, S
 import BackButton from '../components/BackButton.jsx'
 import VenueActivateSheet from '../components/VenueActivateSheet.jsx'
 import { apiFetch } from '../lib/api.js'
+import { resolveIcon } from '../lib/icons.js'
 
 const STATUS_META = {
   pending: { label: 'На модерації', bg: 'var(--orange-light)', color: 'var(--orange)' },
@@ -19,6 +20,7 @@ export default function VenueDetailScreen() {
   const [errorMsg, setErrorMsg] = useState(null)
   const [showActivate, setShowActivate] = useState(false)
   const [connecting, setConnecting] = useState(false)
+  const [togglingRenew, setTogglingRenew] = useState(false)
 
   function load() {
     apiFetch(`/venues/${id}`)
@@ -38,6 +40,19 @@ export default function VenueDetailScreen() {
       setErrorMsg(err.message)
     } finally {
       setConnecting(false)
+    }
+  }
+
+  async function handleDisableAutoRenew() {
+    if (togglingRenew) return
+    setTogglingRenew(true)
+    try {
+      await apiFetch(`/venues/${id}/auto-renew`, { method: 'PATCH', body: JSON.stringify({ auto_renew: false }) })
+      load()
+    } catch (err) {
+      setErrorMsg(err.message)
+    } finally {
+      setTogglingRenew(false)
     }
   }
 
@@ -75,6 +90,11 @@ export default function VenueDetailScreen() {
           <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
             <MapPin size={13} /> {venue.address_text}
           </div>
+          {venue.category && (
+            <div style={{ fontSize: 12, color: venue.category.color ?? 'var(--accent)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
+              {(() => { const Icon = resolveIcon(venue.category.icon_name); return <Icon size={13} /> })()} {venue.category.name}
+            </div>
+          )}
         </div>
       </div>
 
@@ -117,6 +137,17 @@ export default function VenueDetailScreen() {
                 <Inbox size={14} /> Звернення
               </button>
             </div>
+
+            {isActive && venue.auto_renew && (
+              <button
+                className="btn btn-ghost"
+                style={{ width: '100%', marginTop: 8, fontSize: 12, color: 'var(--text-2)', opacity: togglingRenew ? .6 : 1 }}
+                disabled={togglingRenew}
+                onClick={handleDisableAutoRenew}
+              >
+                {togglingRenew ? 'Вимикаємо…' : 'Автопродовження увімкнено — натисни, щоб вимкнути'}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -145,7 +176,7 @@ export default function VenueDetailScreen() {
             className="btn btn-ghost" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: connecting ? .6 : 1 }}
             disabled={connecting} onClick={handleConnect}
           >
-            <MessageCircle size={16} /> {connecting ? 'Зв\'язуємось…' : 'Зв\'язатися'}
+            <MessageCircle size={16} /> {connecting ? 'Зв\'язуємось…' : 'Забронювати'}
           </button>
           <button
             className="btn btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}

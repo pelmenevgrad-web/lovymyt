@@ -93,6 +93,7 @@ export default function ProfileScreen() {
   const [verificationRequest, setVerificationRequest] = useState(null)
   const [referralStats, setReferralStats] = useState(null)
   const [copied, setCopied] = useState(false)
+  const [myVenuesCount, setMyVenuesCount] = useState(null)
 
   useEffect(() => {
     if (status !== 'ok') return
@@ -105,6 +106,9 @@ export default function ProfileScreen() {
     apiFetch('/referrals/stats')
       .then(setReferralStats)
       .catch(err => console.error('[Profile] failed to load referral stats:', err.message))
+    apiFetch('/venues/mine')
+      .then(({ venues }) => setMyVenuesCount(venues.length))
+      .catch(err => console.error('[Profile] failed to load venues:', err.message))
   }, [status])
 
   function copyReferralLink() {
@@ -273,7 +277,7 @@ export default function ProfileScreen() {
           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
           onClick={() => navigate('/venues/mine')}
         >
-          <MapPin size={16} /> Мої локації
+          <MapPin size={16} /> {myVenuesCount ? 'Мої локації' : 'Стати партнером'}
         </button>
         <button
           className="btn btn-ghost"

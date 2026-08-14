@@ -5,9 +5,8 @@ export const STARS_TOPUP_PACKAGES = [100, 300, 750]
 export const PRO_PRICE_STARS = 300
 
 export const VENUE_TIERS = {
-  basic:    { price: 250, days: 14, radius_km: 10, label: 'Базовий' },
-  standard: { price: 450, days: 30, radius_km: 20, label: 'Стандарт' },
-  premium:  { price: 800, days: 30, radius_km: 30, label: 'Преміум' },
+  week:  { price: 300, days: 7,  radius_km: 20, label: '1 тиждень' },
+  month: { price: 500, days: 30, radius_km: 20, label: '1 місяць' },
 }
 
 // Opens a Telegram Stars invoice and resolves once the sheet closes —

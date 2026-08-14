@@ -26,6 +26,7 @@ import AdminVerificationScreen from './screens/AdminVerificationScreen.jsx'
 import AdminStarsScreen from './screens/AdminStarsScreen.jsx'
 import AdminUsersScreen from './screens/AdminUsersScreen.jsx'
 import AdminVenuesScreen from './screens/AdminVenuesScreen.jsx'
+import AdminVenueCategoriesScreen from './screens/AdminVenueCategoriesScreen.jsx'
 import MyVenuesScreen from './screens/MyVenuesScreen.jsx'
 import CreateVenueScreen from './screens/CreateVenueScreen.jsx'
 import VenueDetailScreen from './screens/VenueDetailScreen.jsx'
@@ -247,6 +248,7 @@ export default function App() {
         <Route path="/admin/stars" element={<AdminOnly><AdminStarsScreen /></AdminOnly>} />
         <Route path="/admin/users" element={<AdminOnly><AdminUsersScreen /></AdminOnly>} />
         <Route path="/admin/venues" element={<AdminOnly><AdminVenuesScreen /></AdminOnly>} />
+        <Route path="/admin/venue-categories" element={<AdminOnly><AdminVenueCategoriesScreen /></AdminOnly>} />
         <Route path="/venues/mine" element={<MyVenuesScreen />} />
         <Route path="/venues/new" element={<CreateVenueScreen />} />
         <Route path="/venues/:id/edit" element={<CreateVenueScreen />} />

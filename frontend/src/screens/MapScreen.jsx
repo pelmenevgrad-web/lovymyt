@@ -89,6 +89,15 @@ function FilterSheet({ budget, onBudgetChange, noAgeLimitOnly, onNoAgeLimitChang
 // still be joined after they've started.
 const JOIN_BADGE_ICON = '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path>'
 
+// Partner venues get a distinct round pin (not the event teardrop shape) so
+// they read as "place" markers rather than another activity to join.
+const venuePinIcon = L.divIcon({
+  className: '',
+  html: `<div style="width:26px;height:26px;border-radius:50%;background:var(--blue);border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:13px;">🏪</div>`,
+  iconSize: [26, 26],
+  iconAnchor: [13, 13],
+})
+
 // Small overlapping avatar row hanging below the pin, showing who's already
 // joined (up to 4). Falls back to an initial-letter circle without a photo.
 function markerAvatarsHtml(people) {
@@ -231,6 +240,7 @@ export default function MapScreen() {
   const [budgetFilter, setBudgetFilter] = useState(null)
   const [noAgeLimitOnly, setNoAgeLimitOnly] = useState(false)
   const [liveBattle, setLiveBattle] = useState(null)
+  const [venues, setVenues] = useState([])
 
   useEffect(() => {
     const onTheme = () =>
@@ -253,6 +263,12 @@ export default function MapScreen() {
     apiFetch('/battles')
       .then(({ battles }) => setLiveBattle(battles.find(b => b.status === 'active') ?? null))
       .catch(err => console.error('[Map] failed to load battles:', err.message))
+  }, [])
+
+  useEffect(() => {
+    apiFetch('/venues')
+      .then(({ venues }) => setVenues(venues))
+      .catch(err => console.error('[Map] failed to load venues:', err.message))
   }, [])
 
   const filtered = events
@@ -414,6 +430,15 @@ export default function MapScreen() {
               />
             )
           })}
+
+          {venues.map((venue) => (
+            <Marker
+              key={`venue_${venue.id}`}
+              position={[venue.lat, venue.lng]}
+              icon={venuePinIcon}
+              eventHandlers={{ click: () => navigate(`/venues/${venue.id}`) }}
+            />
+          ))}
 
           <LocateButton onLocate={() => {}} />
         </MapContainer>

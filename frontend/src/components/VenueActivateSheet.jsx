@@ -7,6 +7,7 @@ import { VENUE_TIERS, payInvoice } from '../lib/payments.js'
 export default function VenueActivateSheet({ venueId, onClose, onPaid }) {
   const [payingTier, setPayingTier] = useState(null)
   const [error, setError] = useState(null)
+  const [autoRenew, setAutoRenew] = useState(false)
 
   async function handlePick(tier) {
     if (payingTier) return
@@ -15,7 +16,7 @@ export default function VenueActivateSheet({ venueId, onClose, onPaid }) {
     try {
       const { invoice_link } = await apiFetch(`/venues/${venueId}/activate`, {
         method: 'POST',
-        body: JSON.stringify({ tier }),
+        body: JSON.stringify({ tier, auto_renew: autoRenew }),
       })
       const status = await payInvoice(invoice_link)
       if (status === 'paid') {
@@ -51,6 +52,15 @@ export default function VenueActivateSheet({ venueId, onClose, onPaid }) {
           </button>
         </div>
         {error && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 10, textAlign: 'center' }}>{error}</div>}
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 12px',
+          background: 'var(--card)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+        }}>
+          <input type="checkbox" checked={autoRenew} onChange={e => setAutoRenew(e.target.checked)} style={{ width: 18, height: 18 }} />
+          <span style={{ fontSize: 13 }}>
+            Автопродовження — списувати з балансу Stars автоматично, коли строк вийде
+          </span>
+        </label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {Object.entries(VENUE_TIERS).map(([key, tier]) => (
             <button
