@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import WebApp from '@twa-dev/sdk'
-import { Bell, Camera } from 'lucide-react'
+import { Bell, Camera, Move } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import { compressImage } from '../lib/image.js'
 import BackButton from '../components/BackButton.jsx'
 import LocationSearchPicker from '../components/LocationSearchPicker.jsx'
-import { Avatar } from '../components/EventCard.jsx'
+import ImagePositionPicker from '../components/ImagePositionPicker.jsx'
 
 const BIO_MAX = 300
 const KYIV = { lat: 50.4501, lng: 30.5234 }
@@ -30,6 +30,10 @@ export default function EditProfileScreen() {
   const [homeLat, setHomeLat] = useState(user?.notify_lat ?? KYIV.lat)
   const [homeLng, setHomeLng] = useState(user?.notify_lng ?? KYIV.lng)
   const [radiusKm, setRadiusKm] = useState(user?.notify_radius_km ?? 10)
+  // *Src holds the picked-but-uncropped photo fed into the position picker;
+  // avatar/banner holds the baked crop that's actually sent to the server.
+  const [avatarSrc, setAvatarSrc] = useState(user?.avatar_url ?? null)
+  const [bannerSrc, setBannerSrc] = useState(user?.banner_url ?? null)
   const [avatar, setAvatar] = useState(user?.avatar_url ?? null)
   const [banner, setBanner] = useState(user?.banner_url ?? null)
   const [avatarChanged, setAvatarChanged] = useState(false)
@@ -47,7 +51,7 @@ export default function EditProfileScreen() {
     e.target.value = ''
     if (!file) return
     try {
-      setAvatar(await compressImage(file, 800))
+      setAvatarSrc(await compressImage(file, 1000))
       setAvatarChanged(true)
     } catch {
       setError('Не вдалося обробити фото')
@@ -59,7 +63,7 @@ export default function EditProfileScreen() {
     e.target.value = ''
     if (!file) return
     try {
-      setBanner(await compressImage(file, 1600))
+      setBannerSrc(await compressImage(file, 1600))
       setBannerChanged(true)
     } catch {
       setError('Не вдалося обробити фото')
@@ -109,42 +113,79 @@ export default function EditProfileScreen() {
       </div>
 
       {/* Banner + avatar */}
-      <div style={{ margin: '8px 16px 0' }}>
+      <div style={{ margin: '8px 16px 0', position: 'relative', paddingBottom: 46 }}>
         <input ref={bannerInputRef} type="file" accept="image/*" hidden onChange={handlePickBanner} />
         <input ref={avatarInputRef} type="file" accept="image/*" hidden onChange={handlePickAvatar} />
 
-        <div
-          onClick={() => bannerInputRef.current?.click()}
-          className="card"
-          style={{
-            position: 'relative', height: 110, borderRadius: 'var(--radius-lg)', cursor: 'pointer',
-            overflow: 'hidden', border: '1.5px dashed var(--border)',
-            background: banner ? `url(${banner}) center/cover no-repeat` : 'linear-gradient(135deg, var(--accent-dark) 0%, #7C3AED 100%)',
-          }}
+        <ImagePositionPicker
+          src={bannerSrc}
+          height={170}
+          shape="rect"
+          onCropped={setBanner}
+          onEmptyClick={() => bannerInputRef.current?.click()}
         >
           <div style={{
             position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center', gap: 4,
-            background: banner ? 'rgba(0,0,0,.28)' : 'transparent', color: '#fff',
+            alignItems: 'center', justifyContent: 'center', gap: 4, color: '#fff',
+            background: 'linear-gradient(135deg, var(--accent-dark) 0%, #7C3AED 100%)',
+            border: '1.5px dashed rgba(255,255,255,.4)', borderRadius: 'var(--radius-lg)',
           }}>
             <Camera size={18} />
-            <span style={{ fontSize: 12, fontWeight: 600 }}>{banner ? 'Змінити банер' : 'Додати банер'}</span>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Додати банер</span>
           </div>
+        </ImagePositionPicker>
 
-          <div
-            onClick={e => { e.stopPropagation(); avatarInputRef.current?.click() }}
-            style={{ position: 'absolute', left: 14, bottom: -28, borderRadius: '50%', border: '3px solid var(--bg)', cursor: 'pointer' }}
-          >
-            <Avatar name={user?.first_name} url={avatar} size={64} />
+        {bannerSrc && (
+          <>
             <div style={{
-              position: 'absolute', inset: 0, borderRadius: '50%', display: 'flex',
-              alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.35)', color: '#fff',
+              position: 'absolute', top: 10, right: 10, display: 'flex', alignItems: 'center', gap: 4,
+              fontSize: 11, fontWeight: 600, color: '#fff', background: 'rgba(0,0,0,.4)',
+              borderRadius: 999, padding: '4px 9px', pointerEvents: 'none',
             }}>
-              <Camera size={16} />
+              <Move size={11} /> Перетягни, щоб перемістити
             </div>
-          </div>
+            <button
+              type="button"
+              onClick={() => bannerInputRef.current?.click()}
+              className="btn btn-ghost"
+              style={{
+                position: 'absolute', bottom: 56, right: 10, padding: '6px 12px', fontSize: 12,
+                display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(0,0,0,.45)', color: '#fff', border: 'none',
+              }}
+            >
+              <Camera size={13} /> Змінити
+            </button>
+          </>
+        )}
+
+        <div style={{ position: 'absolute', left: 14, bottom: 0 }}>
+          <ImagePositionPicker
+            src={avatarSrc}
+            width={88}
+            height={88}
+            shape="circle"
+            onCropped={setAvatar}
+            onEmptyClick={() => avatarInputRef.current?.click()}
+          >
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+              <Camera size={20} />
+            </div>
+          </ImagePositionPicker>
+          <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '3px solid var(--bg)', pointerEvents: 'none' }} />
+          {avatarSrc && (
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              style={{
+                position: 'absolute', right: -2, bottom: -2, width: 26, height: 26, borderRadius: '50%',
+                background: 'var(--accent)', color: '#fff', border: '2px solid var(--bg)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+              }}
+            >
+              <Camera size={12} />
+            </button>
+          )}
         </div>
-        <div style={{ height: 34 }} />
       </div>
 
       <div style={{ margin: '8px 16px 0' }}>
