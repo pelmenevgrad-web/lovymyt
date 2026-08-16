@@ -185,7 +185,9 @@ export default function ProfileScreen() {
     <div className="page">
       {/* Hero */}
       <div style={{
-        background: 'linear-gradient(135deg, var(--accent-dark) 0%, #7C3AED 100%)',
+        background: user.banner_url
+          ? `linear-gradient(0deg, var(--accent-dark) 0%, rgba(0,0,0,.15) 100%), url(${user.banner_url}) center/cover no-repeat`
+          : 'linear-gradient(135deg, var(--accent-dark) 0%, #7C3AED 100%)',
         padding: '20px 20px 18px',
         borderRadius: '0 0 28px 28px',
         position: 'relative',

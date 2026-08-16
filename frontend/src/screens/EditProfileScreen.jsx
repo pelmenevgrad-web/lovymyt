@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import WebApp from '@twa-dev/sdk'
-import { Bell } from 'lucide-react'
+import { Bell, Camera } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
+import { compressImage } from '../lib/image.js'
 import BackButton from '../components/BackButton.jsx'
 import LocationSearchPicker from '../components/LocationSearchPicker.jsx'
+import { Avatar } from '../components/EventCard.jsx'
 
 const BIO_MAX = 300
 const KYIV = { lat: 50.4501, lng: 30.5234 }
@@ -28,11 +30,41 @@ export default function EditProfileScreen() {
   const [homeLat, setHomeLat] = useState(user?.notify_lat ?? KYIV.lat)
   const [homeLng, setHomeLng] = useState(user?.notify_lng ?? KYIV.lng)
   const [radiusKm, setRadiusKm] = useState(user?.notify_radius_km ?? 10)
+  const [avatar, setAvatar] = useState(user?.avatar_url ?? null)
+  const [banner, setBanner] = useState(user?.banner_url ?? null)
+  const [avatarChanged, setAvatarChanged] = useState(false)
+  const [bannerChanged, setBannerChanged] = useState(false)
+  const avatarInputRef = useRef(null)
+  const bannerInputRef = useRef(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [isDark, setIsDark] = useState(
     document.documentElement.getAttribute('data-theme') === 'dark'
   )
+
+  async function handlePickAvatar(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      setAvatar(await compressImage(file, 800))
+      setAvatarChanged(true)
+    } catch {
+      setError('Не вдалося обробити фото')
+    }
+  }
+
+  async function handlePickBanner(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      setBanner(await compressImage(file, 1600))
+      setBannerChanged(true)
+    } catch {
+      setError('Не вдалося обробити фото')
+    }
+  }
 
   useEffect(() => {
     const onTheme = () =>
@@ -53,6 +85,8 @@ export default function EditProfileScreen() {
           notify_lat: notifyAll ? null : homeLat,
           notify_lng: notifyAll ? null : homeLng,
           notify_radius_km: notifyAll ? null : radiusKm,
+          ...(avatarChanged ? { avatar } : {}),
+          ...(bannerChanged ? { banner } : {}),
         }),
       })
       updateUser(updated)
@@ -70,8 +104,47 @@ export default function EditProfileScreen() {
         <BackButton />
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800 }}>Редагувати профіль</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Ім'я та аватар беруться з Telegram</p>
+          <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Ім'я береться з Telegram</p>
         </div>
+      </div>
+
+      {/* Banner + avatar */}
+      <div style={{ margin: '8px 16px 0' }}>
+        <input ref={bannerInputRef} type="file" accept="image/*" hidden onChange={handlePickBanner} />
+        <input ref={avatarInputRef} type="file" accept="image/*" hidden onChange={handlePickAvatar} />
+
+        <div
+          onClick={() => bannerInputRef.current?.click()}
+          className="card"
+          style={{
+            position: 'relative', height: 110, borderRadius: 'var(--radius-lg)', cursor: 'pointer',
+            overflow: 'hidden', border: '1.5px dashed var(--border)',
+            background: banner ? `url(${banner}) center/cover no-repeat` : 'linear-gradient(135deg, var(--accent-dark) 0%, #7C3AED 100%)',
+          }}
+        >
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 4,
+            background: banner ? 'rgba(0,0,0,.28)' : 'transparent', color: '#fff',
+          }}>
+            <Camera size={18} />
+            <span style={{ fontSize: 12, fontWeight: 600 }}>{banner ? 'Змінити банер' : 'Додати банер'}</span>
+          </div>
+
+          <div
+            onClick={e => { e.stopPropagation(); avatarInputRef.current?.click() }}
+            style={{ position: 'absolute', left: 14, bottom: -28, borderRadius: '50%', border: '3px solid var(--bg)', cursor: 'pointer' }}
+          >
+            <Avatar name={user?.first_name} url={avatar} size={64} />
+            <div style={{
+              position: 'absolute', inset: 0, borderRadius: '50%', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.35)', color: '#fff',
+            }}>
+              <Camera size={16} />
+            </div>
+          </div>
+        </div>
+        <div style={{ height: 34 }} />
       </div>
 
       <div style={{ margin: '8px 16px 0' }}>

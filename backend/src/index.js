@@ -413,18 +413,22 @@ app.post('/auth/telegram', async (req, res) => {
   const { data: existingUser } = await supabase.from('users').select('id').eq('telegram_id', tgUser.id).maybeSingle()
   const isNewUser = !existingUser
 
+  // avatar_url seeds from the Telegram profile photo only when the account
+  // is first created — once a user uploads their own avatar (PATCH
+  // /users/me), later logins must not clobber it back to the Telegram photo.
+  const upsertPayload = {
+    telegram_id: tgUser.id,
+    username: tgUser.username ?? null,
+    first_name: tgUser.first_name ?? null,
+    last_active_at: new Date().toISOString(),
+  }
+  if (isNewUser) {
+    upsertPayload.avatar_url = tgUser.photo_url ?? null
+  }
+
   const { data: user, error } = await supabase
     .from('users')
-    .upsert(
-      {
-        telegram_id: tgUser.id,
-        username: tgUser.username ?? null,
-        first_name: tgUser.first_name ?? null,
-        avatar_url: tgUser.photo_url ?? null,
-        last_active_at: new Date().toISOString(),
-      },
-      { onConflict: 'telegram_id' },
-    )
+    .upsert(upsertPayload, { onConflict: 'telegram_id' })
     .select()
     .single()
 
@@ -549,8 +553,22 @@ async function requireAdmin(req, res, next) {
 
 // Update the authenticated user's own editable profile fields
 app.patch('/users/me', requireAuth, async (req, res) => {
-  const { bio, gender, birth_date, notify_lat, notify_lng, notify_radius_km, notify_all_events } = req.body ?? {}
+  const { bio, gender, birth_date, notify_lat, notify_lng, notify_radius_km, notify_all_events, avatar, banner } = req.body ?? {}
   const patch = {}
+
+  try {
+    if (avatar !== undefined) {
+      patch.avatar_url = avatar ? await uploadImageDataUrl(avatar, 'chat-images', `avatars/${req.auth.sub}`) : null
+    }
+    if (banner !== undefined) {
+      patch.banner_url = banner ? await uploadImageDataUrl(banner, 'chat-images', `banners/${req.auth.sub}`) : null
+    }
+  } catch (err) {
+    if (err instanceof ImageUploadError) {
+      return res.status(400).json({ error: err.message })
+    }
+    throw err
+  }
 
   if (bio !== undefined) {
     if (typeof bio !== 'string' || bio.length > 300) {
@@ -623,7 +641,7 @@ app.get('/users/me', requireAuth, async (req, res) => {
 app.get('/users/:id', async (req, res) => {
   const { data: user, error } = await supabase
     .from('users')
-    .select('id, first_name, avatar_url, bio, is_verified, is_pro, rating_avg, rating_count')
+    .select('id, first_name, avatar_url, banner_url, bio, is_verified, is_pro, rating_avg, rating_count')
     .eq('id', req.params.id)
     .single()
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { CheckCircle2, XCircle, AlertTriangle, Loader2 } from 'lucide-react'
 import WebApp from '@twa-dev/sdk'
 import BottomNav from './components/BottomNav.jsx'
@@ -223,7 +223,20 @@ export default function App() {
 
   return (
     <MemoryRouter initialEntries={[initialPath]}>
-      <Routes>
+      <AnimatedRoutes />
+      <BottomNav />
+    </MemoryRouter>
+  )
+}
+
+// Fades+slides each screen in on navigation. Keying the wrapper by pathname
+// forces a fresh DOM node per route so the CSS animation restarts every time
+// — plain component swaps from <Routes> alone don't retrigger a CSS animation.
+function AnimatedRoutes() {
+  const location = useLocation()
+  return (
+    <div key={location.pathname} className="screen-enter">
+      <Routes location={location}>
         <Route path="/"           element={<MapScreen />} />
         <Route path="/categories" element={<CategoriesScreen />} />
         <Route path="/chats"      element={<ChatsScreen />} />
@@ -262,8 +275,7 @@ export default function App() {
         <Route path="/clubs/:id" element={<ClubDetailScreen />} />
         <Route path="/battles/:id" element={<BattleScreen />} />
       </Routes>
-      <BottomNav />
-    </MemoryRouter>
+    </div>
   )
 }
 
