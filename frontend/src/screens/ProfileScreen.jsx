@@ -89,6 +89,7 @@ export default function ProfileScreen() {
   const [showVerification, setShowVerification] = useState(false)
   const [verificationRequest, setVerificationRequest] = useState(null)
   const [referralStats, setReferralStats] = useState(null)
+  const [showAllReferrals, setShowAllReferrals] = useState(false)
   const [copied, setCopied] = useState(false)
   const [myVenuesCount, setMyVenuesCount] = useState(null)
 
@@ -297,7 +298,7 @@ export default function ProfileScreen() {
             <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
               Запрошено: {referralStats.referred_count} · Отримано: {referralStats.waves_earned} {waveNoun(referralStats.waves_earned)}
             </div>
-            {referralStats.referrals.map(r => (
+            {(showAllReferrals ? referralStats.referrals : referralStats.referrals.slice(0, 10)).map(r => (
               <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Avatar name={r.first_name} url={r.avatar_url} size={28} />
                 <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{r.first_name}</span>
@@ -310,6 +311,15 @@ export default function ProfileScreen() {
                 )}
               </div>
             ))}
+            {!showAllReferrals && referralStats.referrals.length > 10 && (
+              <button
+                className="btn btn-ghost"
+                style={{ padding: '7px 10px', fontSize: 12 }}
+                onClick={() => setShowAllReferrals(true)}
+              >
+                Показати всіх ({referralStats.referrals.length})
+              </button>
+            )}
           </div>
         )}
         <div style={{ display: 'flex', gap: 8 }}>
