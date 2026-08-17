@@ -141,16 +141,12 @@ body {
   bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)) !important;
 }
 
-/* ── Leaflet attribution — compact & unobtrusive ── */
+/* ── Leaflet attribution — kept in the DOM (CARTO's terms require it to
+   exist) but pushed off-screen so it doesn't visually clutter the map. ── */
 .leaflet-control-attribution {
-  background: rgba(255, 255, 255, .55) !important;
-  font-size: 9px !important;
-  padding: 1px 6px !important;
-  opacity: .7;
-  border-radius: 6px 0 0 0;
-}
-.leaflet-control-attribution a {
-  color: inherit !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
 }
 
 /* ── Map pulse animation ── */
