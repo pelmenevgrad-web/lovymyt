@@ -1,8 +1,7 @@
 import WebApp from '@twa-dev/sdk'
 
-// Must match STARS_TOPUP_PACKAGES / PRO_PRICE_STARS / VENUE_TIERS in backend/src/index.js
+// Must match STARS_TOPUP_PACKAGES / VENUE_TIERS in backend/src/index.js
 export const STARS_TOPUP_PACKAGES = [100, 300, 750]
-export const PRO_PRICE_STARS = 300
 
 export const VENUE_TIERS = {
   week:  { price: 300, days: 7,  radius_km: 20, label: '1 тиждень' },

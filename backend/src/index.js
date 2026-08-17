@@ -49,10 +49,13 @@ export const supabase = createClient(
 const bot = new Telegraf(BOT_TOKEN)
 const BOT_USERNAME = 'lovymyt_bot'
 
-// Monetization via real Telegram Stars payments (currency 'XTR') — PRO is a
-// direct 1-month invoice, top-ups credit users.stars_balance for future
-// spending (gifts). Free tier is capped on simultaneous active events.
-const PRO_PRICE_STARS = 300
+// Monetization via real Telegram Stars payments (currency 'XTR') — top-ups
+// credit users.stars_balance for future spending (gifts). Free tier is
+// capped on simultaneous active events.
+// PRO subscriptions are no longer sold (see POST /pro/subscribe removal);
+// PRO_DURATION_DAYS survives only to unwind a refund of a still-active past
+// purchase — existing subscribers keep is_pro perks until pro_expires_at,
+// then sweepExpiredPro() below turns it off for good.
 const PRO_DURATION_DAYS = 30
 const STARS_TOPUP_PACKAGES = [100, 300, 750]
 const FREE_ACTIVE_EVENTS_LIMIT = 2
@@ -143,21 +146,6 @@ bot.on('message', async (ctx, next) => {
       telegram_payment_charge_id: payment.telegram_payment_charge_id,
     })
     ctx.reply(`✅ Нараховано ${payload.stars} Stars. Твій баланс: ${newBalance}`).catch(() => {})
-  } else if (payload.type === 'pro') {
-    const base = isProActive(user) ? new Date(user.pro_expires_at) : new Date()
-    const newExpiry = new Date(base.getTime() + PRO_DURATION_DAYS * 86_400_000)
-
-    const { error } = await supabase
-      .from('users')
-      .update({ is_pro: true, pro_expires_at: newExpiry.toISOString() })
-      .eq('id', user.id)
-    if (error) return console.error('Activating PRO failed:', error.message)
-
-    await supabase.from('stars_transactions').insert({
-      user_id: user.id, type: 'pro_purchase', amount: PRO_PRICE_STARS,
-      telegram_payment_charge_id: payment.telegram_payment_charge_id,
-    })
-    ctx.reply(`✅ PRO активовано до ${newExpiry.toLocaleDateString('uk-UA')}`).catch(() => {})
   } else if (payload.type === 'venue_activation') {
     const { data: venue } = await supabase
       .from('venues').select('id, title, status, active_until').eq('id', payload.venue_id).single()
@@ -673,25 +661,6 @@ app.post('/stars/topup', requireAuth, async (req, res) => {
     res.json({ invoice_link: invoiceLink })
   } catch (err) {
     console.error('Creating top-up invoice failed:', err.message)
-    res.status(500).json({ error: 'Failed to create invoice' })
-  }
-})
-
-// Real-money Stars invoice for a 1-month PRO subscription (stacks onto the
-// remaining time if already PRO, rather than wasting it).
-app.post('/pro/subscribe', requireAuth, async (req, res) => {
-  try {
-    const invoiceLink = await bot.telegram.createInvoiceLink({
-      title: 'ЛовиМить PRO — 1 місяць',
-      description: 'Необмежені активні заходи, пріоритет на карті',
-      payload: JSON.stringify({ type: 'pro' }),
-      provider_token: '',
-      currency: 'XTR',
-      prices: [{ label: 'PRO — 1 місяць', amount: PRO_PRICE_STARS }],
-    })
-    res.json({ invoice_link: invoiceLink })
-  } catch (err) {
-    console.error('Creating PRO invoice failed:', err.message)
     res.status(500).json({ error: 'Failed to create invoice' })
   }
 })
@@ -1753,7 +1722,7 @@ app.post('/events', requireAuth, async (req, res) => {
     if (error) {
       if (error.message?.includes('event_limit_reached')) {
         return res.status(403).json({
-          error: `На безкоштовному тарифі можна мати не більше ${eventLimitFor(creator)} активних заходів${creator?.wave_points < WAVE_EXTRA_EVENT_SLOT ? ` (набери ${waveText(WAVE_EXTRA_EVENT_SLOT)} за реферальну програму для +1)` : ''}. Онови до PRO для необмеженої кількості.`,
+          error: `Можна мати не більше ${eventLimitFor(creator)} активних заходів${creator?.wave_points < WAVE_EXTRA_EVENT_SLOT ? ` (набери ${waveText(WAVE_EXTRA_EVENT_SLOT)} за реферальну програму для +1)` : ''}.`,
           code: 'FREE_EVENT_LIMIT',
         })
       }

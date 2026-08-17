@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History, ShieldEllipsis, MapPin, Repeat, Gift, Copy, Check, Gem } from 'lucide-react'
+import { Star, Sparkles, BadgeCheck, Pencil, Loader2, AlertTriangle, Smartphone, Share2, History, ShieldEllipsis, MapPin, Repeat, Gift, Copy, Check, Gem, PartyPopper } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/EventCard.jsx'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
@@ -10,7 +10,6 @@ import ReviewsList from '../components/ReviewsList.jsx'
 import GiftsReceived from '../components/GiftsReceived.jsx'
 import TopupSheet from '../components/TopupSheet.jsx'
 import VerificationSheet from '../components/VerificationSheet.jsx'
-import { PRO_PRICE_STARS, payInvoice } from '../lib/payments.js'
 
 const WAVE_REFERRAL_REWARD = 10
 const WAVE_TIERS = [
@@ -87,8 +86,6 @@ export default function ProfileScreen() {
   const { categories } = useCategories()
   const [myEvents, setMyEvents] = useState(null)
   const [showTopup, setShowTopup] = useState(false)
-  const [subscribing, setSubscribing] = useState(false)
-  const [proError, setProError] = useState(null)
   const [showVerification, setShowVerification] = useState(false)
   const [verificationRequest, setVerificationRequest] = useState(null)
   const [referralStats, setReferralStats] = useState(null)
@@ -128,25 +125,6 @@ export default function ProfileScreen() {
   async function refreshMe() {
     const { user: fresh } = await apiFetch('/users/me')
     updateUser(fresh)
-  }
-
-  async function handleSubscribePro() {
-    if (subscribing) return
-    setSubscribing(true)
-    setProError(null)
-    try {
-      const { invoice_link } = await apiFetch('/pro/subscribe', { method: 'POST' })
-      const paymentStatus = await payInvoice(invoice_link)
-      if (paymentStatus === 'paid') {
-        await refreshMe()
-      } else if (paymentStatus === 'failed') {
-        setProError('Оплата не пройшла')
-      }
-    } catch (err) {
-      setProError(err.message)
-    } finally {
-      setSubscribing(false)
-    }
   }
 
   if (status === 'pending') {
@@ -378,8 +356,9 @@ export default function ProfileScreen() {
         </div>
       </div>
 
-      {/* PRO upsell if not pro */}
-      {!user.is_pro && (
+      {/* Nudge card: first-time organizers get a create-event prompt, everyone
+          else sees progress toward their next Waves-referral bonus tier. */}
+      {user.events_created_count === 0 ? (
         <div style={{
           margin: '12px 16px 0',
           background: 'linear-gradient(135deg, #F59E0B, #EC4899)',
@@ -388,25 +367,52 @@ export default function ProfileScreen() {
           color: '#fff',
         }}>
           <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Sparkles size={18} /> Спробуй PRO
+            <PartyPopper size={18} /> Організуй свій перший захід
           </div>
           <div style={{ fontSize: 13, opacity: .9, marginBottom: 12 }}>
-            Пріоритет на карті та необмежена кількість активних заходів (безкоштовно — до {(user.wave_points ?? 0) >= 150 ? 3 : 2})
+            Збери компанію на прогулянку, гру чи вечірку — це займе пару хвилин
           </div>
-          {proError && (
-            <div style={{ fontSize: 12, marginBottom: 10, background: 'rgba(0,0,0,.15)', borderRadius: 8, padding: '6px 10px' }}>{proError}</div>
-          )}
           <button
             className="btn"
-            style={{ background: 'rgba(255,255,255,.25)', color: '#fff', padding: '10px 20px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: subscribing ? .7 : 1 }}
-            disabled={subscribing}
-            onClick={handleSubscribePro}
+            style={{ background: 'rgba(255,255,255,.25)', color: '#fff', padding: '10px 20px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            onClick={() => navigate('/create')}
           >
-            {subscribing ? <Loader2 size={14} className="spin" /> : <Star size={14} fill="currentColor" />}
-            Активувати за {PRO_PRICE_STARS} Stars
+            <Sparkles size={14} /> Створити захід
           </button>
         </div>
-      )}
+      ) : (() => {
+        const points = user.wave_points ?? 0
+        const nextTier = WAVE_TIERS.find(t => points < t.threshold)
+        if (!nextTier) return null
+        const prevThreshold = WAVE_TIERS[WAVE_TIERS.indexOf(nextTier) - 1]?.threshold ?? 0
+        const progress = Math.round(((points - prevThreshold) / (nextTier.threshold - prevThreshold)) * 100)
+        return (
+          <div style={{
+            margin: '12px 16px 0',
+            background: 'linear-gradient(135deg, #F59E0B, #EC4899)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '16px',
+            color: '#fff',
+          }}>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Gem size={18} /> До наступного бонусу
+            </div>
+            <div style={{ fontSize: 13, opacity: .9, marginBottom: 10 }}>
+              Ще {nextTier.threshold - points} {waveNoun(nextTier.threshold - points)} — і відкриється: {nextTier.label.toLowerCase()}
+            </div>
+            <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,.25)', overflow: 'hidden', marginBottom: 12 }}>
+              <div style={{ height: '100%', width: `${progress}%`, background: '#fff', borderRadius: 999 }} />
+            </div>
+            <button
+              className="btn"
+              style={{ background: 'rgba(255,255,255,.25)', color: '#fff', padding: '10px 20px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              onClick={shareReferralLink}
+            >
+              <Share2 size={14} /> Запросити друга
+            </button>
+          </div>
+        )
+      })()}
 
       {showTopup && (
         <TopupSheet onClose={() => setShowTopup(false)} onPaid={refreshMe} />
