@@ -100,6 +100,7 @@ export default function CreateScreen() {
     club_id: null,
   })
 
+  const [eventStatus, setEventStatus] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const coverInputRef = useRef(null)
@@ -123,6 +124,7 @@ export default function CreateScreen() {
           setLoadError('Редагувати може тільки організатор')
           return
         }
+        setEventStatus(event.status)
         setForm(f => ({
           ...f,
           category_ids: event.category_ids ?? (event.category_id ? [event.category_id] : []),
@@ -275,7 +277,10 @@ export default function CreateScreen() {
         body: JSON.stringify({ name: s.name.trim(), needed_amount: Number(s.needed_amount), unit: s.unit.trim() || null }),
       }).catch(err => console.error('[Create] failed to add supply:', s.name, err.message))))
 
-      navigate(isEdit ? `/events/${eventId}` : '/')
+      // event.id, not the eventId param — relaunching a finished event
+      // returns a fresh id (see PATCH /events/:id) instead of the one we
+      // opened the editor with.
+      navigate(isEdit ? `/events/${event.id}` : '/')
     } catch (err) {
       setSubmitError(err.message)
     } finally {
@@ -355,6 +360,12 @@ export default function CreateScreen() {
           <p style={{ fontSize: 13, color: 'var(--text-2)' }}>{isEdit ? 'Зміни деталі заходу' : 'Заповни деталі та запроси компанію'}</p>
         </div>
       </div>
+
+      {isEdit && (eventStatus === 'completed' || eventStatus === 'cancelled') && (
+        <div style={{ margin: '0 16px 16px', fontSize: 12.5, color: 'var(--text-2)', background: 'var(--accent-light)', borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>
+          Цей захід вже {eventStatus === 'completed' ? 'завершився' : 'скасований'}. Постав нову дату й збережи — це перезапустить його як новий захід (той самий чат, порожній список учасників), а поточна історія залишиться на місці.
+        </div>
+      )}
 
       {/* Category */}
       <Section title="Категорія (можна декілька)">

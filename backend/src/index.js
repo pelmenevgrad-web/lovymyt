@@ -1766,7 +1766,7 @@ app.post('/events', requireAuth, async (req, res) => {
 app.patch('/events/:id', requireAuth, async (req, res) => {
   const { data: existing, error: fetchErr } = await supabase
     .from('events')
-    .select('creator_id, max_participants')
+    .select('creator_id, max_participants, status, chat_id, club_id')
     .eq('id', req.params.id)
     .single()
 
@@ -1808,34 +1808,79 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'budget_amount не може бути від\'ємним' })
   }
 
-  let row, error
+  // Editing a finished event (completed/cancelled) to a future date is a
+  // relaunch — same conditions, next run. Reusing the row would silently
+  // strip the finished run out of everyone's stats (events_created_count /
+  // events_joined_count are computed live off events.status='completed'),
+  // so instead the old row is left untouched (history intact) and a fresh
+  // row is inserted for the new run, carrying over club_id and — crucially
+  // — chat_id, so the thread continues instead of starting empty.
+  const isRelaunch = ['completed', 'cancelled'].includes(existing.status) && new Date(start_time) > new Date()
+
+  let row, error, targetEventId
   try {
     const cover_image_url = await resolveCoverImage(cover_image, req.auth.sub)
-    const { error: updateErr } = await supabase
-      .from('events')
-      .update({
-        category_id: categoryIds[0], title: title.trim(), description: description?.trim() || null,
-        address_text: address_text.trim(),
-        start_time, lat, lng,
-        end_time: computeEndTime(start_time, duration_max_hours),
-        duration_min_hours: duration_min_hours || null,
-        max_participants, min_participants, budget_type,
-        budget_amount: budget_amount || null,
-        age_min: age_min || null, age_max: age_max || null,
-        allowed_gender: allowed_gender || 'any',
-        max_male: max_male || null, max_female: max_female || null,
-        radius_visibility: radius_visibility || 'public',
-        conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
-        cover_image_url,
-      })
-      .eq('id', req.params.id)
-    if (updateErr) throw updateErr
+    const eventFields = {
+      category_id: categoryIds[0], title: title.trim(), description: description?.trim() || null,
+      address_text: address_text.trim(),
+      start_time, lat, lng,
+      end_time: computeEndTime(start_time, duration_max_hours),
+      duration_min_hours: duration_min_hours || null,
+      max_participants, min_participants, budget_type,
+      budget_amount: budget_amount || null,
+      age_min: age_min || null, age_max: age_max || null,
+      allowed_gender: allowed_gender || 'any',
+      max_male: max_male || null, max_female: max_female || null,
+      radius_visibility: radius_visibility || 'public',
+      conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
+      cover_image_url,
+    }
 
-    await syncEventCategories(req.params.id, categoryIds)
+    if (isRelaunch) {
+      const { data: creator } = await supabase
+        .from('users').select('is_pro, pro_expires_at, wave_points').eq('id', req.auth.sub).single()
+
+      const { data: newId, error: insertErr } = await supabase.rpc('create_event_atomic', {
+        p_creator_id: req.auth.sub,
+        p_is_pro: isProActive(creator ?? {}),
+        p_free_limit: eventLimitFor(creator),
+        p_category_id: eventFields.category_id, p_title: eventFields.title, p_description: eventFields.description,
+        p_address_text: eventFields.address_text,
+        p_start_time: eventFields.start_time, p_lat: eventFields.lat, p_lng: eventFields.lng,
+        p_end_time: eventFields.end_time,
+        p_duration_min_hours: eventFields.duration_min_hours,
+        p_max_participants: eventFields.max_participants, p_min_participants: eventFields.min_participants,
+        p_budget_type: eventFields.budget_type || 'free',
+        p_budget_amount: eventFields.budget_amount,
+        p_age_min: eventFields.age_min, p_age_max: eventFields.age_max,
+        p_allowed_gender: eventFields.allowed_gender,
+        p_max_male: eventFields.max_male, p_max_female: eventFields.max_female,
+        p_radius_visibility: eventFields.radius_visibility,
+        p_conditions: eventFields.conditions,
+        p_cover_image_url: eventFields.cover_image_url,
+      })
+      if (insertErr) {
+        if (insertErr.message?.includes('event_limit_reached')) {
+          return res.status(403).json({
+            error: `Можна мати не більше ${eventLimitFor(creator)} активних заходів${creator?.wave_points < WAVE_EXTRA_EVENT_SLOT ? ` (набери ${waveText(WAVE_EXTRA_EVENT_SLOT)} за реферальну програму для +1)` : ''}.`,
+            code: 'FREE_EVENT_LIMIT',
+          })
+        }
+        throw insertErr
+      }
+      targetEventId = newId
+      await supabase.from('events').update({ club_id: existing.club_id, chat_id: existing.chat_id }).eq('id', targetEventId)
+    } else {
+      const { error: updateErr } = await supabase.from('events').update(eventFields).eq('id', req.params.id)
+      if (updateErr) throw updateErr
+      targetEventId = req.params.id
+    }
+
+    await syncEventCategories(targetEventId, categoryIds)
     ;({ data: row, error } = await supabase
       .from('events')
       .select(EVENT_SELECT)
-      .eq('id', req.params.id)
+      .eq('id', targetEventId)
       .single())
   } catch (err) {
     if (err instanceof ImageUploadError) {
@@ -1850,22 +1895,27 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to update event' })
   }
 
-  notifyEventPeople(
-    req.params.id, req.auth.sub,
-    (title) => `✏️ Організатор оновив деталі заходу «${title}» — перевір, що змінилося.`,
-  ).catch(() => {})
-  postSystemMessage(req.params.id, '✏️ Організатор оновив деталі заходу — перевір, що змінилося.')
+  if (isRelaunch) {
+    postSystemMessage(targetEventId, '🔄 Організатор перезапустив захід на нову дату — приєднуйся знову!')
+  } else {
+    notifyEventPeople(
+      targetEventId, req.auth.sub,
+      (title) => `✏️ Організатор оновив деталі заходу «${title}» — перевір, що змінилося.`,
+    ).catch(() => {})
+    postSystemMessage(targetEventId, '✏️ Організатор оновив деталі заходу — перевір, що змінилося.')
+  }
 
   // More room than before (cap raised or removed entirely) — pull as many
-  // people off the waitlist as now fit, oldest-waiting first.
+  // people off the waitlist as now fit, oldest-waiting first. Not relevant
+  // for a relaunch: the new row starts with no participants or waitlist.
   const newMax = max_participants || null
   let finalRow = row
-  if (newMax === null || (existing.max_participants != null && newMax > existing.max_participants)) {
+  if (!isRelaunch && (newMax === null || (existing.max_participants != null && newMax > existing.max_participants))) {
     for (let i = 0; i < 200; i++) {
-      const promoted = await promoteFromWaitlist(req.params.id)
+      const promoted = await promoteFromWaitlist(targetEventId)
       if (!promoted) break
     }
-    const { data: refetched } = await supabase.from('events').select(EVENT_SELECT).eq('id', req.params.id).single()
+    const { data: refetched } = await supabase.from('events').select(EVENT_SELECT).eq('id', targetEventId).single()
     if (refetched) finalRow = refetched
   }
 
@@ -2687,9 +2737,13 @@ async function canAccessChat(eventId, userId) {
   return !!participant
 }
 
+// Checks events.chat_id first (not event_chats.event_id) so a relaunched
+// event — a new row created for a repeat run, deliberately given the
+// original event's chat_id up front (see PATCH /events/:id) — resolves to
+// that same shared thread instead of spawning an empty new one.
 async function getOrCreateChat(eventId) {
-  const { data: existing } = await supabase.from('event_chats').select('id').eq('event_id', eventId).maybeSingle()
-  if (existing) return existing.id
+  const { data: event } = await supabase.from('events').select('chat_id').eq('id', eventId).single()
+  if (event?.chat_id) return event.chat_id
 
   const { data: created, error } = await supabase.from('event_chats').insert({ event_id: eventId }).select('id').single()
   if (error) throw error
