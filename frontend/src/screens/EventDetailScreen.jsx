@@ -6,7 +6,7 @@ import WebApp from '@twa-dev/sdk'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
   Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX, Star, Lock, Repeat,
-  Fuel, CheckCircle2, QrCode, ScanLine, Swords,
+  Fuel, CheckCircle2, QrCode, ScanLine, Swords, Copy,
 } from 'lucide-react'
 import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import { appLink, shareViaTelegram } from '../lib/telegram.js'
 import { formatCountdown } from '../lib/format.js'
+import { cartoTileUrl } from '../lib/mapTiles.js'
 
 const eventPinIcon = L.divIcon({
   className: '',
@@ -66,12 +67,7 @@ function EventMap({ lat, lng }) {
         center={[lat, lng]} zoom={14} zoomControl={false}
         style={{ height: 160, width: '100%', borderRadius: 'var(--radius-md)' }}
       >
-        <TileLayer
-          url={isDark
-            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
-          attribution=""
-        />
+        <TileLayer url={cartoTileUrl(isDark)} attribution="" />
         {selectedPlace && (
           <Marker position={[selectedPlace.lat, selectedPlace.lng]} icon={poiIcon(selectedPlace.kind)} />
         )}
@@ -241,6 +237,7 @@ export default function EventDetailScreen() {
   const { categories } = useCategories()
   const [event, setEvent] = useState(null)
   const [status, setStatus] = useState('pending') // pending | ok | error
+  const [linkCopied, setLinkCopied] = useState(false)
   const [joining, setJoining] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [confirmingLeave, setConfirmingLeave] = useState(false)
@@ -460,6 +457,15 @@ export default function EventDetailScreen() {
     )
   }
 
+  // Plain link (not the Telegram share-sheet deep link) — for pasting into
+  // other apps/social networks where t.me share links don't unfurl nicely.
+  function handleCopyLink() {
+    navigator.clipboard.writeText(appLink(`event_${event.id}`)).then(() => {
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2000)
+    })
+  }
+
   return (
     <div className="page">
       {/* Cover photo */}
@@ -504,6 +510,17 @@ export default function EventDetailScreen() {
             <Pencil size={14} />
           </button>
         )}
+        <button
+          onClick={handleCopyLink}
+          title="Скопіювати посилання"
+          style={{
+            background: 'var(--card)', color: 'var(--text)', border: '1.5px solid var(--border)', borderRadius: 10,
+            padding: '7px 10px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', gap: 5, marginRight: 6,
+          }}
+        >
+          {linkCopied ? <Check size={14} /> : <Copy size={14} />}
+        </button>
         <button
           onClick={handleInvite}
           style={{

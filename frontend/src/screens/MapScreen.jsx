@@ -9,6 +9,7 @@ import EventCard, { Avatar } from '../components/EventCard.jsx'
 import { apiFetch } from '../lib/api.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
 import { MARKER_ICON_PATHS } from '../lib/markerIcons.js'
+import { cartoTileUrl } from '../lib/mapTiles.js'
 
 // Kyiv center as default
 const DEFAULT_CENTER = [50.4501, 30.5234]
@@ -411,9 +412,7 @@ export default function MapScreen() {
           zoomControl={false}
         >
           <TileLayer
-            url={isDark
-              ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-              : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
+            url={cartoTileUrl(isDark)}
             attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
           />
 

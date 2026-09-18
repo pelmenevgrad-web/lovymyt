@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import { Search, Fuel } from 'lucide-react'
 import NearbyPlacesList from './NearbyPlacesList.jsx'
+import { cartoTileUrl } from '../lib/mapTiles.js'
 
 const pickerIcon = L.divIcon({
   className: '',
@@ -32,12 +33,7 @@ function MapPicker({ lat, lng, onMapChange, isDark, mapRef, selectedPlace }) {
       style={{ height: 180, width: '100%', borderRadius: 'var(--radius-md)', marginTop: 8 }}
       zoomControl={false}
     >
-      <TileLayer
-        url={isDark
-          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'}
-        attribution=""
-      />
+      <TileLayer url={cartoTileUrl(isDark)} attribution="" />
       <ClickCapture />
       {selectedPlace && (
         <Marker position={[selectedPlace.lat, selectedPlace.lng]} icon={poiIcon(selectedPlace.kind)} />
