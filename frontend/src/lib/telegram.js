@@ -9,6 +9,17 @@ export function appLink(startParam) {
   return startParam ? `https://t.me/${BOT_USERNAME}?startapp=${startParam}` : `https://t.me/${BOT_USERNAME}`
 }
 
+// A plain t.me deep link has no per-event preview — Telegram only shows the
+// bot's static name/photo when the link is pasted outside Telegram itself.
+// /e/:id (see frontend/api/e/[id].js) is a small server-rendered page with
+// real Open Graph tags for the event that immediately redirects into the
+// bot, so pasting it into other apps/socials shows the event's own title,
+// date and cover photo instead.
+const SHARE_ORIGIN = 'https://lovymyt-phi.vercel.app'
+export function eventShareLink(eventId) {
+  return `${SHARE_ORIGIN}/e/${eventId}`
+}
+
 // Opens Telegram's native "forward to..." picker (contacts, groups, chats) with the
 // given link + caption pre-filled. This is the only share surface a Mini App gets —
 // there's no API to read a user's contacts or message them directly.

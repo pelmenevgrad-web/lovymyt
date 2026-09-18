@@ -19,7 +19,7 @@ import WeatherBadge from '../components/WeatherBadge.jsx'
 import EventGallery from '../components/EventGallery.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
-import { appLink, shareViaTelegram } from '../lib/telegram.js'
+import { appLink, shareViaTelegram, eventShareLink } from '../lib/telegram.js'
 import { formatCountdown } from '../lib/format.js'
 import { cartoTileUrl } from '../lib/mapTiles.js'
 
@@ -457,10 +457,11 @@ export default function EventDetailScreen() {
     )
   }
 
-  // Plain link (not the Telegram share-sheet deep link) — for pasting into
-  // other apps/social networks where t.me share links don't unfurl nicely.
+  // The /e/:id preview page (not the Telegram share-sheet deep link) — for
+  // pasting into other apps/social networks, where it unfurls with the
+  // event's own title/photo/date instead of a plain t.me link.
   function handleCopyLink() {
-    navigator.clipboard.writeText(appLink(`event_${event.id}`)).then(() => {
+    navigator.clipboard.writeText(eventShareLink(event.id)).then(() => {
       setLinkCopied(true)
       setTimeout(() => setLinkCopied(false), 2000)
     })
