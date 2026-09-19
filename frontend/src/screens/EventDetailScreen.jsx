@@ -6,7 +6,7 @@ import WebApp from '@twa-dev/sdk'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
   Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX, Star, Lock, Repeat,
-  Fuel, CheckCircle2, QrCode, ScanLine, Swords, Copy,
+  Fuel, CheckCircle2, QrCode, ScanLine, Swords, Share2,
 } from 'lucide-react'
 import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
@@ -17,6 +17,7 @@ import CheckinQrSheet, { CheckedInBadge } from '../components/CheckinQrSheet.jsx
 import BattleChallengeSheet from '../components/BattleChallengeSheet.jsx'
 import WeatherBadge from '../components/WeatherBadge.jsx'
 import EventGallery from '../components/EventGallery.jsx'
+import ShareSheet from '../components/ShareSheet.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import { appLink, shareViaTelegram, eventShareLink } from '../lib/telegram.js'
@@ -237,7 +238,7 @@ export default function EventDetailScreen() {
   const { categories } = useCategories()
   const [event, setEvent] = useState(null)
   const [status, setStatus] = useState('pending') // pending | ok | error
-  const [linkCopied, setLinkCopied] = useState(false)
+  const [showShareSheet, setShowShareSheet] = useState(false)
   const [joining, setJoining] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [confirmingLeave, setConfirmingLeave] = useState(false)
@@ -457,15 +458,8 @@ export default function EventDetailScreen() {
     )
   }
 
-  // The /e/:id preview page (not the Telegram share-sheet deep link) — for
-  // pasting into other apps/social networks, where it unfurls with the
-  // event's own title/photo/date instead of a plain t.me link.
-  function handleCopyLink() {
-    navigator.clipboard.writeText(eventShareLink(event.id)).then(() => {
-      setLinkCopied(true)
-      setTimeout(() => setLinkCopied(false), 2000)
-    })
-  }
+  const shareCaption = `Приєднуйся до заходу «${event.title}» в ЛовиМить! ${formatDateTime(event.start_time)}` +
+    (event.address_text ? ` • ${event.address_text}` : '')
 
   return (
     <div className="page">
@@ -512,15 +506,15 @@ export default function EventDetailScreen() {
           </button>
         )}
         <button
-          onClick={handleCopyLink}
-          title="Скопіювати посилання"
+          onClick={() => setShowShareSheet(true)}
+          title="Поділитися"
           style={{
             background: 'var(--card)', color: 'var(--text)', border: '1.5px solid var(--border)', borderRadius: 10,
             padding: '7px 10px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
             display: 'inline-flex', alignItems: 'center', gap: 5, marginRight: 6,
           }}
         >
-          {linkCopied ? <Check size={14} /> : <Copy size={14} />}
+          <Share2 size={14} />
         </button>
         <button
           onClick={handleInvite}
@@ -533,6 +527,15 @@ export default function EventDetailScreen() {
           <UserPlus size={14} /> Запросити
         </button>
       </div>
+
+      {showShareSheet && (
+        <ShareSheet
+          link={eventShareLink(event.id)}
+          title={event.title}
+          text={shareCaption}
+          onClose={() => setShowShareSheet(false)}
+        />
+      )}
 
       <div style={{ padding: '8px 16px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
