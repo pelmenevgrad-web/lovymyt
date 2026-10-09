@@ -1512,6 +1512,7 @@ function shapeEvent(row, viewerId = null) {
     min_participants: row.min_participants,
     force_continue: row.force_continue ?? false,
     club_id: row.club_id ?? null,
+    is_private: row.is_private ?? false,
     conditions,
   }
 }
@@ -1522,6 +1523,7 @@ app.get('/events', async (req, res) => {
     .from('events')
     .select(EVENT_SELECT)
     .in('status', ['planned', 'gathering', 'active'])
+    .eq('is_private', false)
     .order('is_pro', { foreignTable: 'creator', ascending: false })
     .order('start_time', { ascending: true })
 
@@ -1540,6 +1542,7 @@ app.get('/events/history', async (req, res) => {
     .from('events')
     .select(EVENT_SELECT)
     .eq('status', 'completed')
+    .eq('is_private', false)
     .order('start_time', { ascending: false })
 
   if (error) {
@@ -1652,7 +1655,7 @@ app.post('/events', requireAuth, async (req, res) => {
     max_participants, min_participants, budget_type, budget_amount,
     age_min, age_max, late_join_allowed, conditions,
     allowed_gender, max_male, max_female, radius_visibility,
-    duration_min_hours, duration_max_hours, cover_image, club_id,
+    duration_min_hours, duration_max_hours, cover_image, club_id, is_private,
   } = req.body ?? {}
 
   let club = null
@@ -1731,8 +1734,11 @@ app.post('/events', requireAuth, async (req, res) => {
 
     await syncEventCategories(newId, categoryIds)
 
-    if (club) {
-      await supabase.from('events').update({ club_id: club.id }).eq('id', newId)
+    const postInsertUpdates = {}
+    if (club) postInsertUpdates.club_id = club.id
+    if (is_private) postInsertUpdates.is_private = true
+    if (Object.keys(postInsertUpdates).length > 0) {
+      await supabase.from('events').update(postInsertUpdates).eq('id', newId)
     }
 
     const { data: row, error: refetchErr } = await supabase
@@ -1782,7 +1788,7 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
     max_participants, min_participants, budget_type, budget_amount,
     age_min, age_max, late_join_allowed, conditions,
     allowed_gender, max_male, max_female, radius_visibility,
-    duration_min_hours, duration_max_hours, cover_image,
+    duration_min_hours, duration_max_hours, cover_image, is_private,
   } = req.body ?? {}
 
   const categoryIds = parseCategoryIds(category_ids)
@@ -1834,6 +1840,7 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
       radius_visibility: radius_visibility || 'public',
       conditions: { ...(conditions ?? {}), late_join_allowed: !!late_join_allowed },
       cover_image_url,
+      is_private: !!is_private,
     }
 
     if (isRelaunch) {
@@ -1869,7 +1876,7 @@ app.patch('/events/:id', requireAuth, async (req, res) => {
         throw insertErr
       }
       targetEventId = newId
-      await supabase.from('events').update({ club_id: existing.club_id, chat_id: existing.chat_id }).eq('id', targetEventId)
+      await supabase.from('events').update({ club_id: existing.club_id, chat_id: existing.chat_id, is_private: eventFields.is_private }).eq('id', targetEventId)
     } else {
       const { error: updateErr } = await supabase.from('events').update(eventFields).eq('id', req.params.id)
       if (updateErr) throw updateErr

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import WebApp from '@twa-dev/sdk'
-import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Save, Zap, Plus, X, Loader2, Camera, Image as ImageIcon, Lock, MapPin } from 'lucide-react'
+import { Gift, CreditCard, Handshake, PawPrint, Baby, BadgeCheck, Rocket, Save, Zap, Plus, X, Loader2, Camera, Image as ImageIcon, Lock, MapPin, EyeOff } from 'lucide-react'
 import { useCategories } from '../context/CategoriesContext.jsx'
 import { apiFetch } from '../lib/api.js'
 import { compressImage } from '../lib/image.js'
@@ -97,6 +97,7 @@ export default function CreateScreen() {
     supplies: [],
     cover_image: null,
     radius_visibility: 'public',
+    is_private: false,
     club_id: null,
   })
 
@@ -155,6 +156,7 @@ export default function CreateScreen() {
           },
           cover_image: event.cover_image_url ?? null,
           radius_visibility: event.radius_visibility ?? 'public',
+          is_private: !!event.is_private,
         }))
       })
       .catch(err => setLoadError(err.message))
@@ -267,6 +269,7 @@ export default function CreateScreen() {
           conditions: form.conditions,
           cover_image: form.cover_image,
           radius_visibility: form.radius_visibility,
+          is_private: form.is_private,
           club_id: form.club_id,
         }),
       })
@@ -442,6 +445,23 @@ export default function CreateScreen() {
         >
           <Lock size={15} /> Точну адресу бачать тільки прийняті учасники
         </button>
+        <button
+          className="chip"
+          style={{
+            marginTop: 8,
+            background: form.is_private ? 'var(--accent-light)' : 'var(--card)',
+            color: form.is_private ? 'var(--accent)' : 'var(--text)',
+            border: '1.5px solid ' + (form.is_private ? 'var(--accent)' : 'var(--border)'),
+          }}
+          onClick={() => set('is_private', !form.is_private)}
+        >
+          <EyeOff size={15} /> Приватний захід — тільки за посиланням
+        </button>
+        {form.is_private && (
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
+            Не з'явиться на карті й у списках заходів. Приєднатися зможе тільки той, кому ти сам надішлеш посилання на захід.
+          </p>
+        )}
       </Section>
 
       {/* Date/time */}

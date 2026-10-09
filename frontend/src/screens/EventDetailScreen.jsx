@@ -6,7 +6,7 @@ import WebApp from '@twa-dev/sdk'
 import {
   Clock, MapPin, Users, PawPrint, Baby, BadgeCheck, Zap,
   Loader2, AlertTriangle, Check, Gift, CreditCard, Handshake, UserPlus, Venus, Mars, Pencil, MessageCircle, Flag, UserX, Star, Lock, Repeat,
-  Fuel, CheckCircle2, QrCode, ScanLine, Swords, Share2,
+  Fuel, CheckCircle2, QrCode, ScanLine, Swords, Share2, EyeOff,
 } from 'lucide-react'
 import { STATUS_META } from '../data/mockData.js'
 import { useCategories } from '../context/CategoriesContext.jsx'
@@ -490,6 +490,11 @@ export default function EventDetailScreen() {
           {event.status === 'active' && event.late_join_allowed && (
             <span className="badge" style={{ background: 'var(--green-light)', color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
               <Zap size={11} /> Можна приєднатися
+            </span>
+          )}
+          {event.is_private && (
+            <span className="badge" style={{ background: 'var(--card)', color: 'var(--text-2)', border: '1px solid var(--border)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              <EyeOff size={11} /> Приватний
             </span>
           )}
         </div>
